@@ -132,3 +132,46 @@ async fn live_preview_on_enwiki() {
         println!("{:40} raw={:?} value={:?} -> {result:?}", page.title, out.raw, out.value);
     }
 }
+
+#[tokio::test]
+async fn qualifiers_fixed_and_from_parameters() {
+    use crate::harvest::spec::{QualifierSource, QualifierSpec};
+    let (_server, clients) = world().await;
+    let fixed = |value: &str| QualifierSpec {
+        property: PropertyId(407),
+        source: QualifierSource::Fixed { value: value.into() },
+    };
+    let from_date =
+        QualifierSpec { property: PropertyId(585), source: QualifierSource::Parameter { names: vec!["date".into()] } };
+    let spec = JobSpec {
+        property: Some(PropertyId(345)),
+        template: "IMDb title".into(),
+        parameters: vec!["1".into()],
+        transform: TransformSpec { add_prefix: "tt".into(), ..Default::default() },
+        qualifiers: vec![fixed("Q1860"), from_date],
+        date_limit: None,
+        ..Default::default()
+    };
+    let job = Job::prepare(&clients, spec.clone()).await.unwrap();
+    let eval = |text: &'static str| {
+        let (job, clients) = (&job, &clients);
+        async move { evaluate(job, clients, &page(Some(1)), &revision(text)).await }
+    };
+
+    let out = eval("{{IMDb title|0111161|date=12 May 1950}}").await;
+    assert_eq!(out.value.as_deref(), Some("tt0111161; P407: Q1860; P585: 1950-05-12"));
+    let statement = out.result.unwrap().statement;
+    assert_eq!(statement["qualifiers"]["P407"][0]["datavalue"]["value"]["id"], "Q1860");
+    assert_eq!(statement["qualifiers"]["P585"][0]["datavalue"]["value"]["precision"], 11);
+    assert_eq!(statement["qualifiers-order"], serde_json::json!(["P407", "P585"]));
+
+    let without_date = eval("{{IMDb title|0111161}}").await.result.unwrap().statement;
+    assert_eq!(without_date["qualifiers-order"], serde_json::json!(["P407"]), "missing parameter: qualifier left out");
+
+    let bad = eval("{{IMDb title|0111161|date=sometime}}").await.result.unwrap_err();
+    assert_eq!(bad, error("qualifier P585: could not find a date"));
+
+    let typo = JobSpec { qualifiers: vec![fixed("Q18x60")], ..spec };
+    let err = Job::prepare(&clients, typo).await.unwrap_err().to_string();
+    assert!(err.starts_with("qualifier P407: 'Q18x60'"), "{err}");
+}

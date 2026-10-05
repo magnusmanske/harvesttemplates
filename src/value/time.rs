@@ -86,6 +86,17 @@ impl Date {
     }
 }
 
+/// `1950`, `1950-05` or `1950-05-12`, as precise as the date is.
+impl std::fmt::Display for Date {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match (self.month, self.day) {
+            (0, _) => write!(f, "{}", self.year),
+            (m, 0) => write!(f, "{}-{m:02}", self.year),
+            (m, d) => write!(f, "{}-{m:02}-{d:02}", self.year),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Relation {

@@ -15,6 +15,44 @@ pub enum SkipIf {
     Value,
 }
 
+/// A qualifier added to every harvested statement (#210, #133).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QualifierSpec {
+    pub property: PropertyId,
+    #[serde(flatten)]
+    pub source: QualifierSource,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "source", rename_all = "lowercase")]
+pub enum QualifierSource {
+    /// The same value on every statement, e.g. `Q1860`.
+    Fixed { value: String },
+    /// A parameter (or aliases) of the same template transclusion.
+    Parameter { names: Vec<String> },
+}
+
+impl QualifierSpec {
+    /// Permalink form: `P407|fixed|Q1860` or `P585|param|date,datum`.
+    fn to_legacy(&self) -> String {
+        match &self.source {
+            QualifierSource::Fixed { value } => format!("{}|fixed|{value}", self.property),
+            QualifierSource::Parameter { names } => format!("{}|param|{}", self.property, names.join(",")),
+        }
+    }
+
+    fn from_legacy(s: &str) -> Option<Self> {
+        let mut parts = s.splitn(3, '|');
+        let property = parts.next()?.parse().ok()?;
+        let source = match (parts.next()?, parts.next()?.trim()) {
+            ("fixed", value) => QualifierSource::Fixed { value: value.to_string() },
+            ("param", names) => QualifierSource::Parameter { names: split_commas(names) },
+            _ => return None,
+        };
+        Some(Self { property, source })
+    }
+}
+
 /// Separate template parameters for year, month and day.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DateParameters {
@@ -56,6 +94,7 @@ pub struct JobSpec {
     pub skip_if: SkipIf,
     /// Constraints to check; `None` checks all. Mandatory ones are always checked.
     pub constraints: Option<Vec<ItemId>>,
+    pub qualifiers: Vec<QualifierSpec>,
 }
 
 /// The original tool's default: only Gregorian-safe dates.
@@ -86,6 +125,7 @@ impl Default for JobSpec {
             manual_list: vec![],
             skip_if: SkipIf::Property,
             constraints: None,
+            qualifiers: vec![],
         }
     }
 }
@@ -143,6 +183,7 @@ impl JobSpec {
                 "constraints" => {
                     spec.constraints = Some(split_pipes(v).iter().filter_map(|c| c.parse().ok()).collect());
                 }
+                "qualifier" => spec.qualifiers.extend(QualifierSpec::from_legacy(v)),
                 _ => {}
             }
         }
@@ -214,6 +255,7 @@ impl JobSpec {
         if let Some(c) = &self.constraints {
             q.push(("constraints", c.iter().map(ItemId::to_string).collect::<Vec<_>>().join("|")));
         }
+        q.extend(self.qualifiers.iter().map(|qs| ("qualifier", qs.to_legacy())));
         let pairs: Vec<String> = q.into_iter().map(|(k, v)| format!("{k}={}", urlencoding::encode(&v))).collect();
         pairs.join("&")
     }
@@ -225,6 +267,10 @@ fn date_parameters(spec: &mut JobSpec) -> &mut DateParameters {
 
 fn split_pipes(s: &str) -> Vec<String> {
     s.split('|').map(str::trim).filter(|p| !p.is_empty()).map(String::from).collect()
+}
+
+fn split_commas(s: &str) -> Vec<String> {
+    s.split(',').map(str::trim).filter(|p| !p.is_empty()).map(String::from).collect()
 }
 
 fn bit(b: bool) -> String {
@@ -291,6 +337,13 @@ mod tests {
         );
         spec.manual_list = vec!["Page one".into(), "Q42".into()];
         spec.link_choice = LinkChoice::Last;
+        spec.qualifiers = vec![
+            QualifierSpec { property: PropertyId(407), source: QualifierSource::Fixed { value: "Q1860".into() } },
+            QualifierSpec {
+                property: PropertyId(585),
+                source: QualifierSource::Parameter { names: vec!["date".into(), "datum".into()] },
+            },
+        ];
         let pairs: Vec<(String, String)> = spec
             .to_legacy_query()
             .split('&')

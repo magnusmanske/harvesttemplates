@@ -3,6 +3,7 @@ import { reactive, ref, computed, watch, onMounted } from 'vue';
 import { api, toQuery } from './api.js';
 import { user, login } from './session.js';
 import { entityUrl } from './links.js';
+import QualifierEditor from './qualifier-editor.js';
 
 const PROJECTS = ['wikipedia', 'wikibooks', 'wikinews', 'wikiquote', 'wikisource', 'wikiversity', 'wikivoyage', 'wiktionary', 'commons', 'species'];
 
@@ -30,6 +31,7 @@ function toggled(selection, all, name) {
 }
 
 export default {
+  components: { QualifierEditor },
   setup() {
     const spec = reactive({});
     const ready = ref(false);
@@ -257,6 +259,9 @@ export default {
           <label class="form-label mt-2">Language code</label>
           <input v-model.trim="spec.language" class="form-control" placeholder="en">
         </template>
+
+        <h2 class="h5 mt-4">Qualifiers</h2>
+        <qualifier-editor v-model="spec.qualifiers" />
 
         <h2 class="h5 mt-4">Modify values</h2>
         <div class="row g-1">

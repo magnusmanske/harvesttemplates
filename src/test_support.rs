@@ -90,8 +90,10 @@ pub async fn world() -> (MockServer, Clients) {
         }}}),
     )
     .await;
-    mock(&server, "ids=P19&", json!({"entities": {"P19": {"id": "P19", "datatype": "wikibase-item", "claims": {}}}}))
-        .await;
+    for (id, datatype) in [("P19", "wikibase-item"), ("P407", "wikibase-item"), ("P585", "time")] {
+        mock(&server, &format!("ids={id}&"), json!({"entities": {id: {"id": id, "datatype": datatype, "claims": {}}}}))
+            .await;
+    }
     mock(
         &server,
         "prop=redirects",

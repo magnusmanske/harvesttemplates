@@ -41,14 +41,43 @@ pub fn snak(property: PropertyId, datatype: Datatype, value: &Value) -> Json {
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Qualifier {
+    pub property: PropertyId,
+    pub datatype: Datatype,
+    pub value: Value,
+}
+
 /// A new statement, as used in `wbeditentity` `data.claims`.
-pub fn statement(property: PropertyId, datatype: Datatype, value: &Value, source: &Source) -> Json {
-    json!({
+pub fn statement(
+    property: PropertyId,
+    datatype: Datatype,
+    value: &Value,
+    qualifiers: &[Qualifier],
+    source: &Source,
+) -> Json {
+    let mut statement = json!({
         "type": "statement",
         "rank": "normal",
         "mainsnak": snak(property, datatype, value),
         "references": [source.reference()],
-    })
+    });
+    if !qualifiers.is_empty() {
+        let mut snaks = serde_json::Map::new();
+        let mut order: Vec<String> = vec![];
+        for q in qualifiers {
+            let key = q.property.to_string();
+            if !order.contains(&key) {
+                order.push(key.clone());
+            }
+            if let Some(list) = snaks.entry(key).or_insert_with(|| json!([])).as_array_mut() {
+                list.push(snak(q.property, q.datatype, &q.value));
+            }
+        }
+        statement["qualifiers"] = Json::Object(snaks);
+        statement["qualifiers-order"] = json!(order);
+    }
+    statement
 }
 
 #[cfg(test)]
@@ -58,7 +87,7 @@ mod tests {
     #[test]
     fn statement_with_reference() {
         let source = Source::new(Some(ItemId(328)), "en.wikipedia.org", "The Shawshank Redemption", 123);
-        let s = statement(PropertyId(345), Datatype::ExternalId, &Value::String("tt0111161".into()), &source);
+        let s = statement(PropertyId(345), Datatype::ExternalId, &Value::String("tt0111161".into()), &[], &source);
         assert_eq!(s["mainsnak"]["property"], "P345");
         assert_eq!(s["mainsnak"]["datatype"], "external-id");
         assert_eq!(s["mainsnak"]["datavalue"]["value"], "tt0111161");
@@ -69,5 +98,18 @@ mod tests {
             "https://en.wikipedia.org/w/index.php?title=The_Shawshank_Redemption&oldid=123"
         );
         assert_eq!(reference["snaks-order"], json!(["P143", "P4656"]));
+        assert!(s.get("qualifiers").is_none());
+    }
+
+    #[test]
+    fn statement_with_qualifiers() {
+        let source = Source::new(None, "en.wikipedia.org", "X", 1);
+        let qualifiers =
+            [Qualifier { property: PropertyId(407), datatype: Datatype::Item, value: Value::Item(ItemId(1860)) }];
+        let s =
+            statement(PropertyId(989), Datatype::CommonsMedia, &Value::String("A.ogg".into()), &qualifiers, &source);
+        assert_eq!(s["qualifiers"]["P407"][0]["datavalue"]["value"]["id"], "Q1860");
+        assert_eq!(s["qualifiers-order"], json!(["P407"]));
+        assert_eq!(s["references"][0]["snaks-order"], json!(["P4656"]), "no wiki item, no P143");
     }
 }

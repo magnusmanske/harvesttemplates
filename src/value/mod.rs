@@ -148,7 +148,8 @@ impl Value {
         match self {
             Self::Item(q) => q.to_string(),
             Self::String(s) => s.clone(),
-            Self::Time { date, .. } => date.wikibase_time(),
+            Self::Time { date, calendar: Calendar::Julian } => format!("{date} (Julian)"),
+            Self::Time { date, .. } => date.to_string(),
             Self::Quantity { amount, unit: Some(u) } => format!("{amount} {u}"),
             Self::Quantity { amount, unit: None } => amount.clone(),
             Self::Monolingual { text, language } => format!("{text} ({language})"),

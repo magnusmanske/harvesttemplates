@@ -1,12 +1,15 @@
 //! A validated spec, with everything looked up once per run.
 
 use super::spec::JobSpec;
+use super::spec::QualifierSource;
 use crate::app_state::Clients;
+use crate::constraints;
+use crate::ids::{ItemId, PropertyId};
+use crate::value::{self, Datatype, DecimalMark, Transform, Value, ValueError};
 use crate::wiki::Site;
 use crate::wiki::site::{NS_TEMPLATE, host_for};
 use crate::wikidata::{ConstraintDef, ConstraintStatus, PropertyInfo};
 use crate::wikitext::TemplateMatcher;
-use crate::{constraints, ids::ItemId, value::Datatype, value::Transform};
 
 const ALLOWED_UNITS: ItemId = ItemId(21_514_353);
 
@@ -35,6 +38,21 @@ pub struct Job {
     pub transform: Transform,
     /// The constraints to check: those selected, plus all mandatory ones.
     pub constraints: Vec<ConstraintDef>,
+    pub qualifiers: Vec<PreparedQualifier>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PreparedQualifier {
+    pub property: PropertyId,
+    pub datatype: Datatype,
+    pub source: PreparedSource,
+}
+
+#[derive(Debug, Clone)]
+pub enum PreparedSource {
+    /// Parsed once, when the run is created.
+    Fixed(Value),
+    Parameter(Vec<String>),
 }
 
 impl Job {
@@ -57,8 +75,57 @@ impl Job {
         let matcher =
             site.template_matcher(template_names(&template_key, redirects, spec.template_redirects.as_deref()));
         let constraints = selected_constraints(&property, spec.constraints.as_deref());
-        Ok(Self { spec, site, property, datatype, template_key, matcher, transform, constraints })
+        let qualifiers = prepare_qualifiers(clients, &spec).await?;
+        Ok(Self { spec, site, property, datatype, template_key, matcher, transform, constraints, qualifiers })
     }
+}
+
+async fn prepare_qualifiers(clients: &Clients, spec: &JobSpec) -> Result<Vec<PreparedQualifier>, JobError> {
+    let mut prepared = Vec::with_capacity(spec.qualifiers.len());
+    for q in &spec.qualifiers {
+        let info = clients.wikidata.property(q.property).await?;
+        let info = info.ok_or_else(|| invalid(format!("qualifier {} does not exist", q.property)))?;
+        let datatype = info
+            .datatype
+            .filter(|_| !info.deprecated)
+            .ok_or_else(|| invalid(format!("qualifier {} ({}) is not supported", q.property, info.datatype_name)))?;
+        let source = match &q.source {
+            QualifierSource::Fixed { value } => PreparedSource::Fixed(
+                fixed_value(datatype, value.trim(), spec)
+                    .map_err(|e| invalid(format!("qualifier {}: '{value}': {e}", q.property)))?,
+            ),
+            QualifierSource::Parameter { names } if names.is_empty() => {
+                return Err(invalid(format!("qualifier {}: choose a parameter", q.property)));
+            }
+            QualifierSource::Parameter { names } => PreparedSource::Parameter(names.clone()),
+        };
+        prepared.push(PreparedQualifier { property: q.property, datatype, source });
+    }
+    Ok(prepared)
+}
+
+/// A typed-in qualifier value. Items are ids; monolingual text may end in `@language`.
+fn fixed_value(datatype: Datatype, text: &str, spec: &JobSpec) -> Result<Value, String> {
+    let err = |e: ValueError| e.to_string();
+    Ok(match datatype {
+        Datatype::Item => Value::Item(text.parse()?),
+        Datatype::Time => {
+            Value::Time { date: value::parse_date(text, "en", spec.calendar).map_err(err)?, calendar: spec.calendar }
+        }
+        Datatype::Quantity => {
+            Value::Quantity { amount: value::parse_amount(text, DecimalMark::Point).map_err(err)?, unit: None }
+        }
+        Datatype::Url => Value::String(value::url(text).map_err(err)?),
+        Datatype::Monolingual => {
+            let (text, language) = text.rsplit_once('@').ok_or("write it as text@language")?;
+            check_language(language).map_err(|e| e.to_string())?;
+            Value::Monolingual { text: text.to_string(), language: language.to_string() }
+        }
+        Datatype::String | Datatype::ExternalId | Datatype::CommonsMedia if !text.is_empty() => {
+            Value::String(text.to_string())
+        }
+        _ => return Err("empty value".into()),
+    })
 }
 
 fn check_value_source(spec: &JobSpec) -> Result<(), JobError> {

@@ -16,10 +16,14 @@ message a user can see in the results table.
 5. **Transform**: add prefix/suffix, remove prefix/suffix (literal), then the
    regex search/replace (Rust `regex` syntax; `$1` works as in JavaScript).
 6. **Parse** by datatype (below).
-7. **Existing values**: on the live item. The exact value (or a more precise
+7. **Qualifiers**: each one is a fixed value (checked when the run is created)
+   or another parameter of the same transclusion, parsed by the qualifier
+   property's datatype (links are resolved for items). A missing parameter
+   leaves that qualifier out; an unusable one rejects the row.
+8. **Existing values**: on the live item. The exact value (or a more precise
    date) is always skipped; with "skip items with property set", any value is.
-8. **Constraints**: the selected ones plus all mandatory ones. See `CONSTRAINTS.md`.
-9. **Edit**: one `wbeditentity` with references *imported from* (P143, the
+9. **Constraints**: the selected ones plus all mandatory ones. See `CONSTRAINTS.md`.
+10. **Edit**: one `wbeditentity` with references *imported from* (P143, the
    wiki's item) and *Wikimedia import URL* (P4656, the exact revision).
 
 ## Datatypes
@@ -65,6 +69,7 @@ To add a language, add its month names to `data/monthnames.json`.
 | error | not a URL | |
 | error | the item does not exist | deleted item |
 | error | constraint violation: *name* | |
+| error | qualifier P…: *reason* | a qualifier parameter could not be parsed |
 | error | lookup failed: … | network problem; the row can be retried |
 | error | *API message* | Wikidata refused the edit |
 

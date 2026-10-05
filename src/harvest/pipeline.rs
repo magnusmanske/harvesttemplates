@@ -1,7 +1,7 @@
 //! One page in, one planned edit (or a reason why not) out.
 //! Every rejection message is shown to the user; see `docs/HARVEST_PIPELINE.md`.
 
-use super::job::Job;
+use super::job::{Job, PreparedSource};
 use super::spec::SkipIf;
 use crate::app_state::Clients;
 use crate::constraints::{Candidate, first_violation};
@@ -9,8 +9,8 @@ use crate::ids::ItemId;
 use crate::value::{self, Datatype, Date, Value, ValueError};
 use crate::wiki::Page;
 use crate::wiki::content::{self, FileLocation, LinkTarget, Revision};
-use crate::wikidata::{Entity, Source, statement};
-use crate::wikitext::clean_value;
+use crate::wikidata::{Entity, Qualifier, Source, statement};
+use crate::wikitext::{TemplateParams, clean_value};
 use serde_json::Value as Json;
 
 /// Nothing to do (`Skip`), or something is wrong with the value (`Error`).
@@ -67,21 +67,28 @@ async fn steps(
     out: &mut Outcome,
 ) -> Result<PlannedEdit, Rejection> {
     let item = page.item.ok_or_else(|| skip("the page has no Wikidata item"))?;
-    let raw = extract(job, page, &revision.text)?;
-    out.raw = Some(raw.to_string());
-    let value = parse(job, clients, &raw, item).await?;
-    out.value = Some(value.display());
+    let found = extract(job, page, &revision.text)?;
+    out.raw = Some(found.raw.to_string());
+    let value = parse(job, clients, &found.raw, item).await?;
+    let qualifiers = qualifiers(job, clients, found.params.as_ref(), item).await?;
+    out.value = Some(display(&value, &qualifiers));
     let entity = clients.wikidata.item(item).await.map_err(failed)?;
     let entity = entity.ok_or_else(|| error("the item does not exist"))?;
     check_existing(job, &entity, &value)?;
-    let candidate =
-        Candidate { item: &entity, property: job.property.id, datatype: job.datatype, value: &value, qualifiers: &[] };
+    let qualifier_ids: Vec<_> = qualifiers.iter().map(|q| q.property).collect();
+    let candidate = Candidate {
+        item: &entity,
+        property: job.property.id,
+        datatype: job.datatype,
+        value: &value,
+        qualifiers: &qualifier_ids,
+    };
     let defs: Vec<_> = job.constraints.iter().collect();
     if let Some(name) = first_violation(&defs, &candidate, clients.services()).await.map_err(failed)? {
         return Err(error(format!("constraint violation: {name}")));
     }
     let source = Source::new(job.site.edition, &job.site.host, &page.title, revision.id);
-    let statement = statement(job.property.id, job.datatype, &value, &source);
+    let statement = statement(job.property.id, job.datatype, &value, &qualifiers, &source);
     Ok(PlannedEdit { item: entity.id, value, statement })
 }
 
@@ -103,28 +110,36 @@ impl std::fmt::Display for RawValue {
     }
 }
 
-fn extract(job: &Job, page: &Page, wikitext: &str) -> Result<RawValue, Rejection> {
+/// The main raw value, and the template's parameters (qualifiers may need them).
+struct Found {
+    raw: RawValue,
+    params: Option<TemplateParams>,
+}
+
+fn extract(job: &Job, page: &Page, wikitext: &str) -> Result<Found, Rejection> {
+    let params = job.matcher.find(wikitext);
     if job.spec.use_page_title {
         let prefix = job.site.namespaces.get(&job.spec.namespace).map(|ns| format!("{ns}:"));
         let title = prefix.and_then(|p| page.title.strip_prefix(&p)).unwrap_or(&page.title);
-        return Ok(RawValue::Text(title.to_string()));
+        return Ok(Found { raw: RawValue::Text(title.to_string()), params });
     }
-    let params = job.matcher.find(wikitext).ok_or_else(|| skip("template not found"))?;
-    if let Some(dp) = &job.spec.date_parameters {
-        let get = |name: &Option<String>| name.as_deref().and_then(|n| params.get(n)).map(clean_value);
-        let year = params.get(&dp.year).map(clean_value).ok_or_else(|| skip("no value"))?;
-        return Ok(RawValue::DateParts { year, month: get(&dp.month), day: get(&dp.day) });
-    }
-    let raw = params.first_of(job.spec.parameters.iter().map(String::as_str)).ok_or_else(|| skip("no value"))?;
-    Ok(RawValue::Text(clean_value(raw)))
+    let p = params.as_ref().ok_or_else(|| skip("template not found"))?;
+    let raw = if let Some(dp) = &job.spec.date_parameters {
+        let get = |name: &Option<String>| name.as_deref().and_then(|n| p.get(n)).map(clean_value);
+        let year = p.get(&dp.year).map(clean_value).ok_or_else(|| skip("no value"))?;
+        RawValue::DateParts { year, month: get(&dp.month), day: get(&dp.day) }
+    } else {
+        let raw = p.first_of(job.spec.parameters.iter().map(String::as_str)).ok_or_else(|| skip("no value"))?;
+        RawValue::Text(clean_value(raw))
+    };
+    Ok(Found { raw, params })
 }
 
 async fn parse(job: &Job, clients: &Clients, raw: &RawValue, item: ItemId) -> Result<Value, Rejection> {
-    let lang = &job.site.lang;
-    let calendar = job.spec.calendar;
     let text = match raw {
         RawValue::DateParts { year, month, day } => {
-            let date = value::parse_date_parts(year, month.as_deref(), day.as_deref(), lang, calendar);
+            let date =
+                value::parse_date_parts(year, month.as_deref(), day.as_deref(), &job.site.lang, job.spec.calendar);
             return time_value(job, date.map_err(bad_value)?);
         }
         RawValue::Text(text) => job.transform.apply(text).trim().to_string(),
@@ -132,17 +147,65 @@ async fn parse(job: &Job, clients: &Clients, raw: &RawValue, item: ItemId) -> Re
     if text.is_empty() {
         return Err(skip("no value"));
     }
-    match job.datatype {
+    parse_as(job, clients, job.datatype, job.spec.unit, text, item).await
+}
+
+/// Text to a value of `datatype`, using the spec's calendar, decimal mark and language.
+async fn parse_as(
+    job: &Job,
+    clients: &Clients,
+    datatype: Datatype,
+    unit: Option<ItemId>,
+    text: String,
+    item: ItemId,
+) -> Result<Value, Rejection> {
+    let spec = &job.spec;
+    match datatype {
         Datatype::Item => resolve_item(job, clients, &text, item).await,
         Datatype::CommonsMedia => commons_file(job, clients, &text).await,
         Datatype::Url => value::url(&text).map(Value::String).map_err(bad_value),
         Datatype::String | Datatype::ExternalId => Ok(Value::String(text)),
-        Datatype::Time => time_value(job, value::parse_date(&text, lang, calendar).map_err(bad_value)?),
-        Datatype::Quantity => value::parse_amount(&text, job.spec.decimal_mark)
-            .map(|amount| Value::Quantity { amount, unit: job.spec.unit })
-            .map_err(bad_value),
-        Datatype::Monolingual => Ok(Value::Monolingual { text, language: job.spec.language.clone() }),
+        Datatype::Time => time_value(job, value::parse_date(&text, &job.site.lang, spec.calendar).map_err(bad_value)?),
+        Datatype::Quantity => {
+            let amount = value::parse_amount(&text, spec.decimal_mark).map_err(bad_value)?;
+            Ok(Value::Quantity { amount, unit })
+        }
+        Datatype::Monolingual => Ok(Value::Monolingual { text, language: spec.language.clone() }),
     }
+}
+
+/// Qualifier values for this page. A missing parameter just leaves its qualifier out;
+/// an unusable one rejects the row, so no half-right statement is written.
+async fn qualifiers(
+    job: &Job,
+    clients: &Clients,
+    params: Option<&TemplateParams>,
+    item: ItemId,
+) -> Result<Vec<Qualifier>, Rejection> {
+    let mut out = Vec::with_capacity(job.qualifiers.len());
+    for q in &job.qualifiers {
+        let value = match &q.source {
+            PreparedSource::Fixed(value) => value.clone(),
+            PreparedSource::Parameter(names) => {
+                let raw = params.and_then(|p| p.first_of(names.iter().map(String::as_str))).map(clean_value);
+                let Some(text) = raw.filter(|t| !t.is_empty()) else { continue };
+                let parsed = parse_as(job, clients, q.datatype, None, text, item).await;
+                parsed.map_err(|r| match r {
+                    Rejection::Skip(m) | Rejection::Error(m) => error(format!("qualifier {}: {m}", q.property)),
+                })?
+            }
+        };
+        out.push(Qualifier { property: q.property, datatype: q.datatype, value });
+    }
+    Ok(out)
+}
+
+fn display(value: &Value, qualifiers: &[Qualifier]) -> String {
+    let mut shown = value.display();
+    for q in qualifiers {
+        shown.push_str(&format!("; {}: {}", q.property, q.value.display()));
+    }
+    shown
 }
 
 fn time_value(job: &Job, date: Date) -> Result<Value, Rejection> {
