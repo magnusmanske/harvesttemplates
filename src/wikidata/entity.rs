@@ -17,6 +17,7 @@ const SUGGESTION: ItemId = ItemId(62_026_391);
 const DEPRECATED_PROPERTY_CLASSES: [ItemId; 2] = [ItemId(37_911_748), ItemId(18_644_427)];
 const INSTANCE_OF: PropertyId = PropertyId(31);
 const UNIT_SYMBOL: PropertyId = PropertyId(5061);
+const FORMATTER_URL: PropertyId = PropertyId(1630);
 const ALLOWED_UNITS: ItemId = ItemId(21_514_353);
 const ITEM_OF_CONSTRAINT: PropertyId = PropertyId(2305);
 
@@ -209,6 +210,8 @@ pub struct PropertyInfo {
     pub datatype: Option<Datatype>,
     pub deprecated: bool,
     pub constraints: Vec<ConstraintDef>,
+    /// P1630, with `$1` for the value: turns external ids into links.
+    pub formatter_url: Option<String>,
 }
 
 impl PropertyInfo {
@@ -225,6 +228,12 @@ impl PropertyInfo {
             datatype: Datatype::from_wikibase(&datatype_name),
             datatype_name,
             deprecated,
+            formatter_url: json["claims"][FORMATTER_URL.to_string()]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|s| s["rank"] != "deprecated")
+                .find_map(|s| s["mainsnak"]["datavalue"]["value"].as_str().map(str::to_string)),
             constraints: statements.into_iter().flatten().filter_map(ConstraintDef::from_statement).collect(),
         }
     }

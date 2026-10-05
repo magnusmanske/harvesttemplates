@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { api } from './api.js';
 import { user, login } from './session.js';
-import { pageUrl, entityUrl, editGroupUrl, formatTime, statusColor, rowStatusLabel } from './links.js';
+import { pageUrl, entityUrl, editGroupUrl, formatTime, statusColor, rowStatusLabel, valueUrl } from './links.js';
 
 const PAGE_SIZE = 100;
 const POLL_MS = 2000;
@@ -19,6 +19,7 @@ export default {
   setup(props) {
     const info = ref(null);
     const rows = ref([]);
+    const property = ref(null);
     const filter = ref('');
     const offset = ref(0);
     const error = ref('');
@@ -41,6 +42,7 @@ export default {
       clearTimeout(timer);
       try {
         info.value = await api(`/runs/${props.id}`);
+        if (!property.value) property.value = await api(`/property/${info.value.run.spec.property}`).catch(() => null);
         const status = filter.value ? `&status=${filter.value}` : '';
         rows.value = await api(`/runs/${props.id}/rows?offset=${offset.value}&limit=${PAGE_SIZE}${status}`);
         error.value = '';
@@ -81,7 +83,7 @@ export default {
 
     return {
       info, run, counts, total, rows, filter, offset, error, busy, isOwner, canWork, progress, excluded, FILTERS, PAGE_SIZE,
-      refresh, share, login, pageUrl, entityUrl, editGroupUrl, formatTime, statusColor, rowStatusLabel,
+      refresh, share, login, pageUrl, entityUrl, editGroupUrl, formatTime, statusColor, rowStatusLabel, property, valueUrl,
       preview: () => act('preview'),
       start: () => act('start', `Add up to ${(counts.value.pending + counts.value.ready).toLocaleString()} statements to Wikidata as ${user.value}?`),
       stop: () => act('stop'),
@@ -141,7 +143,10 @@ export default {
           <td><a :href="pageUrl(info.host, r.title)" target="_blank" rel="noopener">{{ r.title }}</a></td>
           <td><a v-if="r.item" :href="entityUrl(r.item)" target="_blank" rel="noopener">{{ r.item }}</a></td>
           <td class="ht-value">{{ r.raw_value }}</td>
-          <td class="ht-value">{{ r.value }}</td>
+          <td class="ht-value">
+            <a v-if="valueUrl(property, r.value)" :href="valueUrl(property, r.value)" target="_blank" rel="noopener">{{ r.value }}</a>
+            <template v-else>{{ r.value }}</template>
+          </td>
           <td><span class="badge" :class="'text-bg-' + statusColor(r.status)">{{ rowStatusLabel(r.status) }}</span> {{ r.message }}</td>
         </tr>
         <tr v-if="!rows.length"><td colspan="5" class="text-muted">No pages.</td></tr>

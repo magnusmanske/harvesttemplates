@@ -290,7 +290,7 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 | 130 | Archive URLs | 2 ✓ | Detect `web.archive.org`, option: skip / extract original |
 | 70, 147, 52 | Case, separators, split/join | 2 ✓ | case option; value pattern `{1}-{2}`; punctuation alone counts as no value |
 | 149 | Last link instead of first | 2 | Option |
-| 172 | Formatter‑URL links in table | 2 | Use P1630 |
+| 172 | Formatter‑URL links in table | 2 ✓ | Use P1630 |
 | 145 | Limit to instances of X | 2 | Batched VDQS filter on candidates |
 | 71 | SPARQL / PetScan source | 2 | `PageSource::PetScan` (id) and `::Sparql` |
 | 174 | Tags for shares | 2 | `share_tag` |

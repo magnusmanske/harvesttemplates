@@ -101,6 +101,7 @@ async fn property(State(app): State<SharedState>, Path(id): Path<String>) -> Api
         "datatype": info.datatype_name,
         "supported": info.datatype.is_some(),
         "deprecated": info.deprecated,
+        "formatter_url": info.formatter_url,
         "constraints": constraints,
         "units": units,
     })))
