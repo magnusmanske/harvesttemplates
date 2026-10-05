@@ -1,6 +1,6 @@
 use super::api::{MwApi, params};
 use crate::ids::ItemId;
-use crate::wikitext::TemplateMatcher;
+use crate::wikitext::{TemplateMatcher, uppercase_first};
 use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
 use serde_json::Value;
@@ -141,11 +141,7 @@ impl Site {
         if namespace == NS_TEMPLATE && self.template_case_sensitive {
             key
         } else {
-            let mut chars = key.chars();
-            chars
-                .next()
-                .map(|c| c.to_uppercase().chain(chars).collect())
-                .unwrap_or_default()
+            uppercase_first(&key)
         }
     }
 

@@ -1,6 +1,7 @@
 //! Pull link targets, file names and URLs out of cleaned wikitext values.
 
 use super::ValueError;
+use crate::wikitext::uppercase_first;
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -75,14 +76,6 @@ fn strip_namespace<'a>(name: &'a str, prefixes: &[String]) -> &'a str {
     } else {
         name
     }
-}
-
-fn uppercase_first(s: &str) -> String {
-    let mut chars = s.chars();
-    chars
-        .next()
-        .map(|c| c.to_uppercase().chain(chars).collect())
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

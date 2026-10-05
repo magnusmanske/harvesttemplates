@@ -1,4 +1,5 @@
 use super::scan::{find_top_level, scan_call};
+use super::uppercase_first;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
@@ -125,14 +126,6 @@ impl TemplateParams {
 
 fn normalize_spaces(s: &str) -> String {
     s.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-fn uppercase_first(s: &str) -> String {
-    let mut chars = s.chars();
-    chars
-        .next()
-        .map(|c| c.to_uppercase().chain(chars).collect())
-        .unwrap_or_default()
 }
 
 #[cfg(test)]
