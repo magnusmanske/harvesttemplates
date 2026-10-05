@@ -72,7 +72,7 @@ impl Date {
         )
     }
 
-    const fn earliest(&self) -> Self {
+    pub const fn earliest(&self) -> Self {
         Self {
             year: self.year,
             month: if self.month == 0 { 1 } else { self.month },
@@ -80,7 +80,7 @@ impl Date {
         }
     }
 
-    const fn latest(&self) -> Self {
+    pub const fn latest(&self) -> Self {
         Self {
             year: self.year,
             month: if self.month == 0 { 12 } else { self.month },

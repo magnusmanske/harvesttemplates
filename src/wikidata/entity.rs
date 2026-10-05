@@ -152,7 +152,7 @@ pub struct ConstraintDef {
 }
 
 impl ConstraintDef {
-    fn from_statement(statement: &Json) -> Option<Self> {
+    pub(crate) fn from_statement(statement: &Json) -> Option<Self> {
         let kind = statement["mainsnak"]["datavalue"]["value"]["id"]
             .as_str()?
             .parse()

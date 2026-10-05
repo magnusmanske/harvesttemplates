@@ -165,7 +165,7 @@ impl Value {
 }
 
 /// Year, month and day of a Wikibase time value, honouring its precision.
-fn existing_date(value: &Json) -> Option<Date> {
+pub fn existing_date(value: &Json) -> Option<Date> {
     let time = value["time"].as_str()?.strip_prefix('+')?;
     let mut parts = time.split(['-', 'T']);
     let year = parts.next()?.parse().ok()?;
@@ -176,6 +176,19 @@ fn existing_date(value: &Json) -> Option<Date> {
         month: if precision >= 10 { month } else { 0 },
         day: if precision >= 11 { day } else { 0 },
     })
+}
+
+/// The value as a SPARQL term, for the datatypes WDQS checks need.
+pub fn sparql_term(value: &Value, datatype: Datatype) -> Option<String> {
+    match (value, datatype) {
+        (Value::Item(q), _) => Some(format!("wd:{q}")),
+        (Value::String(s), Datatype::CommonsMedia) => Some(format!(
+            "<http://commons.wikimedia.org/wiki/Special:FilePath/{}>",
+            urlencoding::encode(&s.replace(' ', "_"))
+        )),
+        (Value::String(s), _) => serde_json::to_string(s).ok(),
+        _ => None,
+    }
 }
 
 pub fn entity_uri(id: impl std::fmt::Display) -> String {
