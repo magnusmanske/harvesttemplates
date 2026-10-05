@@ -20,6 +20,7 @@ pub mod app_state;
 pub mod auth;
 pub mod config;
 pub mod constraints;
+pub mod harvest;
 pub mod http;
 pub mod ids;
 pub mod value;

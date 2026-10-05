@@ -1,6 +1,7 @@
 //! Access to the source wikis: site metadata, the MediaWiki API and the replicas.
 
 pub mod api;
+pub mod content;
 pub mod pages;
 pub mod replica;
 pub mod site;

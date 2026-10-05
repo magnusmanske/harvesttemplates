@@ -86,9 +86,7 @@ impl Site {
             .as_object()
             .into_iter()
             .flatten()
-            .filter_map(|(_, ns)| {
-                Some((ns["id"].as_i64()? as i32, ns["name"].as_str()?.to_string()))
-            })
+            .filter_map(|(_, ns)| Some((ns["id"].as_i64()? as i32, ns["name"].as_str()?.to_string())))
             .collect();
         let prefixes = |id: i32| -> Vec<String> {
             let ns = &query["namespaces"][id.to_string()];
@@ -151,15 +149,35 @@ impl Site {
         }
     }
 
-    pub fn template_matcher(
-        &self,
-        names: impl IntoIterator<Item = impl AsRef<str>>,
-    ) -> TemplateMatcher {
-        TemplateMatcher::new(
-            names,
-            &self.template_prefixes,
-            !self.template_case_sensitive,
-        )
+    /// Redirects to a template (names without prefix), or `None` if it does not exist.
+    pub async fn template_redirects(&self, api: &MwApi, key: &str) -> Result<Option<Vec<String>>> {
+        let title = self.full_title(NS_TEMPLATE, key);
+        let p = params(&[
+            ("action", "query"),
+            ("titles", &title),
+            ("prop", "redirects"),
+            ("rdnamespace", "10"),
+            ("rdlimit", "max"),
+            ("rdprop", "title"),
+        ]);
+        let (mut exists, mut names) = (true, vec![]);
+        api.query_continue(&self.host, &p, |json| {
+            let page = &json["query"]["pages"][0];
+            exists &= page.get("missing").is_none() && page.get("invalid").is_none();
+            let redirects = page["redirects"].as_array().into_iter().flatten();
+            names.extend(
+                redirects
+                    .filter_map(|r| r["title"].as_str())
+                    .map(|t| self.db_key(NS_TEMPLATE, t).replace('_', " ")),
+            );
+            true
+        })
+        .await?;
+        Ok(exists.then_some(names))
+    }
+
+    pub fn template_matcher(&self, names: impl IntoIterator<Item = impl AsRef<str>>) -> TemplateMatcher {
+        TemplateMatcher::new(names, &self.template_prefixes, !self.template_case_sensitive)
     }
 }
 
@@ -171,14 +189,8 @@ mod tests {
     #[test]
     fn hosts() {
         assert_eq!(host_for("en", "wikipedia").unwrap(), "en.wikipedia.org");
-        assert_eq!(
-            host_for("zh-min-nan", "wikipedia").unwrap(),
-            "zh-min-nan.wikipedia.org"
-        );
-        assert_eq!(
-            host_for("whatever", "commons").unwrap(),
-            "commons.wikimedia.org"
-        );
+        assert_eq!(host_for("zh-min-nan", "wikipedia").unwrap(), "zh-min-nan.wikipedia.org");
+        assert_eq!(host_for("whatever", "commons").unwrap(), "commons.wikimedia.org");
         assert!(host_for("evil.com/", "wikipedia").is_err());
         assert!(host_for("en", "example").is_err());
         assert!(host_for("EN", "wikipedia").is_err());
@@ -205,10 +217,7 @@ mod tests {
         assert_eq!(site.file_prefixes, ["Datei", "File", "Bild"]);
         assert_eq!(site.template_prefixes, ["Vorlage", "Template"]);
         assert!(!site.template_case_sensitive);
-        assert_eq!(
-            site.full_title(14, "Deutsche_Person"),
-            "Kategorie:Deutsche Person"
-        );
+        assert_eq!(site.full_title(14, "Deutsche_Person"), "Kategorie:Deutsche Person");
         assert_eq!(site.full_title(0, "Berlin"), "Berlin");
     }
 
