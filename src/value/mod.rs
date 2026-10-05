@@ -1,0 +1,192 @@
+//! Turning a cleaned template value into a Wikibase data value.
+//! Network-dependent steps (item lookup, file existence) live in the harvest pipeline.
+
+mod links;
+mod numerals;
+mod quantity;
+mod time;
+mod transform;
+
+pub use links::{LinkChoice, file_name, link_target, url};
+pub use quantity::{DecimalMark, parse_amount};
+pub use time::{Calendar, Date, DateLimit, Relation, parse_date, parse_date_parts};
+pub use transform::{Transform, TransformSpec};
+
+use crate::ids::ItemId;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value as Json, json};
+
+/// Property datatypes HarvestTemplates can write, named as in the Wikibase API.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Datatype {
+    #[serde(rename = "wikibase-item")]
+    Item,
+    #[serde(rename = "string")]
+    String,
+    #[serde(rename = "external-id")]
+    ExternalId,
+    #[serde(rename = "url")]
+    Url,
+    #[serde(rename = "commonsMedia")]
+    CommonsMedia,
+    #[serde(rename = "time")]
+    Time,
+    #[serde(rename = "quantity")]
+    Quantity,
+    #[serde(rename = "monolingualtext")]
+    Monolingual,
+}
+
+impl Datatype {
+    /// `None` for datatypes we cannot harvest (yet), e.g. `globe-coordinate`.
+    pub fn from_wikibase(name: &str) -> Option<Self> {
+        serde_json::from_value(Json::String(name.to_string())).ok()
+    }
+
+    pub fn wikibase_name(self) -> String {
+        serde_json::to_value(self)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_default()
+    }
+}
+
+/// Why a value could not be used. The message is shown to the user per row.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ValueError {
+    #[error("could not find a date")]
+    NoDate,
+    #[error("imprecise date")]
+    ImpreciseDate,
+    #[error("ambiguous date: several years")]
+    AmbiguousDate,
+    #[error("invalid date")]
+    InvalidDate,
+    #[error("date outside the configured range")]
+    OutsideDateLimit,
+    #[error("unclear number")]
+    UnclearNumber,
+    #[error("no link to a target page")]
+    NoLink,
+    #[error("link to a section, not a page")]
+    SectionLink,
+    #[error("not a file name")]
+    NotAFile,
+    #[error("not a URL")]
+    NotAUrl,
+}
+
+/// A parsed value, ready to become a Wikibase snak.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Value {
+    Item(ItemId),
+    /// `string`, `external-id`, `url` and `commonsMedia`.
+    String(String),
+    Time {
+        date: Date,
+        calendar: Calendar,
+    },
+    Quantity {
+        amount: String,
+        unit: Option<ItemId>,
+    },
+    Monolingual {
+        text: String,
+        language: String,
+    },
+}
+
+impl Value {
+    /// The `datavalue` object of a Wikibase snak.
+    pub fn datavalue(&self) -> Json {
+        match self {
+            Self::Item(q) => json!({
+                "type": "wikibase-entityid",
+                "value": { "entity-type": "item", "numeric-id": q.0, "id": q.to_string() },
+            }),
+            Self::String(s) => json!({ "type": "string", "value": s }),
+            Self::Time { date, calendar } => json!({
+                "type": "time",
+                "value": {
+                    "time": date.wikibase_time(),
+                    "timezone": 0, "before": 0, "after": 0,
+                    "precision": date.precision(),
+                    "calendarmodel": entity_uri(calendar.item()),
+                },
+            }),
+            Self::Quantity { amount, unit } => json!({
+                "type": "quantity",
+                "value": { "amount": amount, "unit": unit.map_or_else(|| "1".to_string(), entity_uri) },
+            }),
+            Self::Monolingual { text, language } => json!({
+                "type": "monolingualtext",
+                "value": { "text": text, "language": language },
+            }),
+        }
+    }
+
+    /// Short human-readable form for the results table.
+    pub fn display(&self) -> String {
+        match self {
+            Self::Item(q) => q.to_string(),
+            Self::String(s) => s.clone(),
+            Self::Time { date, .. } => date.wikibase_time(),
+            Self::Quantity {
+                amount,
+                unit: Some(u),
+            } => format!("{amount} {u}"),
+            Self::Quantity { amount, unit: None } => amount.clone(),
+            Self::Monolingual { text, language } => format!("{text} ({language})"),
+        }
+    }
+}
+
+pub fn entity_uri(id: impl std::fmt::Display) -> String {
+    format!("http://www.wikidata.org/entity/{id}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn datatype_names_round_trip() {
+        for name in [
+            "wikibase-item",
+            "string",
+            "external-id",
+            "url",
+            "commonsMedia",
+            "time",
+            "quantity",
+            "monolingualtext",
+        ] {
+            assert_eq!(Datatype::from_wikibase(name).unwrap().wikibase_name(), name);
+        }
+        assert_eq!(Datatype::from_wikibase("globe-coordinate"), None);
+    }
+
+    #[test]
+    fn datavalues() {
+        let v = Value::Quantity {
+            amount: "+5".into(),
+            unit: None,
+        };
+        assert_eq!(v.datavalue()["value"]["unit"], "1");
+        let v = Value::Time {
+            date: Date {
+                year: 1950,
+                month: 5,
+                day: 0,
+            },
+            calendar: Calendar::Julian,
+        };
+        assert_eq!(v.datavalue()["value"]["precision"], 10);
+        assert_eq!(
+            v.datavalue()["value"]["calendarmodel"],
+            "http://www.wikidata.org/entity/Q1985786"
+        );
+        assert_eq!(Value::Item(ItemId(42)).datavalue()["value"]["id"], "Q42");
+    }
+}
