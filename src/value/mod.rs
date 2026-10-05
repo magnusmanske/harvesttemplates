@@ -9,7 +9,7 @@ mod time;
 mod transform;
 
 pub use coordinate::{Coordinate, parse_coordinate, parse_coordinate_parts};
-pub use links::{LinkChoice, file_name, link_target, url};
+pub use links::{ArchiveUrls, Archived, LinkChoice, archived, file_name, link_target, url};
 pub use quantity::{DecimalMark, parse_amount, split_unit, unit_key};
 pub use time::{Calendar, Date, DateLimit, Relation, parse_date, parse_date_parts};
 pub use transform::{Case, Transform, TransformSpec};

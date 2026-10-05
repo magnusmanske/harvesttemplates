@@ -37,7 +37,7 @@ message a user can see in the results table.
 |---|---|
 | item | First (or last) `[[link]]`; with "plain links", the whole value as a title. Redirects are followed on the source wiki. |
 | string, external-id | The value as is. |
-| url | `[https://… label]` → URL; must be `http(s)://` without spaces. |
+| url | `[https://… label]` → URL; must be `http(s)://` without spaces. A Wayback Machine link becomes the original URL, or is skipped or kept, as chosen; other archives' links (archive.today, WebCite, …) cannot give the original. |
 | commonsMedia | File name without namespace, `_` → space, percent-decoded. Must be on Commons, not only local. |
 | time | See below. Calendar and optional date limit from the spec. |
 | quantity | Any digit script, thousands separators removed, chosen decimal mark. A unit after the number (`82 g`, `2,4 [[kilogram\|kg]]`) is matched against the names, aliases and symbols of the allowed units (or the chosen one); otherwise the chosen unit. |
@@ -74,6 +74,8 @@ To add a language, add its month names to `data/monthnames.json`.
 | error | the link points to the page itself | |
 | error | not a file name / the file does not exist / the file is only on X, not on Commons | |
 | error | not a URL | |
+| skipped | a link to an archived copy | archive links set to "skip" |
+| error | an archived copy without the original URL | |
 | error | could not find a coordinate | |
 | error | the item does not exist | deleted item |
 | error | constraint violation: *name* | |

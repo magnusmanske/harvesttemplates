@@ -287,7 +287,7 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 | 16 | globe-coordinate | 2 ✓ | lat/lon params or `{{coord}}` style |
 | 136, 15 | Unit suffix in quantity | 2 ✓ | Match unit label/alias/symbol |
 | 135 | Calendar switch date | 2 | Full date instead of year |
-| 130 | Archive URLs | 2 | Detect `web.archive.org`, option: skip / extract original |
+| 130 | Archive URLs | 2 ✓ | Detect `web.archive.org`, option: skip / extract original |
 | 70, 147, 52 | Case, separators, split/join | 2 ✓ | case option; value pattern `{1}-{2}`; punctuation alone counts as no value |
 | 149 | Last link instead of first | 2 | Option |
 | 172 | Formatter‑URL links in table | 2 | Use P1630 |

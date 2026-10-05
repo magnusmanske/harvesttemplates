@@ -274,6 +274,14 @@ export default {
           <label class="form-label mt-2">Decimal mark</label>
           <select v-model="spec.decimal_mark" class="form-select"><option value=".">. (1,234.5)</option><option value=",">, (1.234,5)</option></select>
         </template>
+        <template v-if="datatype === 'url'">
+          <label class="form-label mt-2">Links to archived copies (web.archive.org, …)</label>
+          <select v-model="spec.archive_urls" class="form-select">
+            <option value="original">use the original URL</option>
+            <option value="skip">skip them</option>
+            <option value="keep">keep them</option>
+          </select>
+        </template>
         <template v-if="datatype === 'monolingualtext'">
           <label class="form-label mt-2">Language code</label>
           <input v-model.trim="spec.language" class="form-control" placeholder="en">

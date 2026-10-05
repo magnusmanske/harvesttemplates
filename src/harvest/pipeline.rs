@@ -6,7 +6,7 @@ use super::spec::SkipIf;
 use crate::app_state::Clients;
 use crate::constraints::{Candidate, first_violation};
 use crate::ids::ItemId;
-use crate::value::{self, Datatype, Date, Value, ValueError};
+use crate::value::{self, ArchiveUrls, Archived, Datatype, Date, Value, ValueError};
 use crate::wiki::Page;
 use crate::wiki::content::{self, FileLocation, LinkTarget, Revision};
 use crate::wikidata::{Entity, Qualifier, Source, statement};
@@ -202,7 +202,7 @@ async fn parse_as(
     match datatype {
         Datatype::Item => resolve_item(job, clients, &text, item).await,
         Datatype::CommonsMedia => commons_file(job, clients, &text).await,
-        Datatype::Url => value::url(&text).map(Value::String).map_err(bad_value),
+        Datatype::Url => web_url(spec.archive_urls, &text),
         Datatype::String | Datatype::ExternalId => Ok(Value::String(text)),
         Datatype::Time => time_value(job, value::parse_date(&text, &job.site.lang, spec.calendar).map_err(bad_value)?),
         Datatype::Quantity => {
@@ -256,6 +256,18 @@ fn display(value: &Value, qualifiers: &[Qualifier]) -> String {
         shown.push_str(&format!("; {}: {}", q.property, q.value.display()));
     }
     shown
+}
+
+fn web_url(archive_urls: ArchiveUrls, text: &str) -> Result<Value, Rejection> {
+    let url = value::url(text).map_err(bad_value)?;
+    match (value::archived(&url), archive_urls) {
+        (Archived::No, _) | (_, ArchiveUrls::Keep) => Ok(Value::String(url)),
+        (_, ArchiveUrls::Skip) => Err(skip("a link to an archived copy")),
+        (Archived::Wayback(original), ArchiveUrls::Original) => {
+            value::url(&original).map(Value::String).map_err(bad_value)
+        }
+        (Archived::Other, ArchiveUrls::Original) => Err(error("an archived copy without the original URL")),
+    }
 }
 
 fn time_value(job: &Job, date: Date) -> Result<Value, Rejection> {

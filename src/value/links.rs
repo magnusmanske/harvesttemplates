@@ -60,6 +60,52 @@ pub fn url(value: &str) -> Result<String, ValueError> {
     Ok(url.to_string())
 }
 
+static WAYBACK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^https?://(?:web\.|wayback\.)?archive\.org/web/[0-9]+[a-z_]*/(.+)$").unwrap());
+const OTHER_ARCHIVES: [&str; 10] = [
+    "archive.today",
+    "archive.ph",
+    "archive.is",
+    "archive.li",
+    "archive.vn",
+    "archive.fo",
+    "archive.md",
+    "webcitation.org",
+    "webarchive.org.uk",
+    "archive-it.org",
+];
+
+/// What to do with links to archived copies (#130).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ArchiveUrls {
+    /// Use the original URL inside a Wayback Machine link.
+    #[default]
+    Original,
+    Skip,
+    Keep,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Archived {
+    No,
+    /// A Wayback Machine link, with the original URL.
+    Wayback(String),
+    /// An archive whose links do not contain the original URL.
+    Other,
+}
+
+pub fn archived(url: &str) -> Archived {
+    if let Some(caps) = WAYBACK.captures(url) {
+        let original = &caps[1];
+        let original = if original.contains("://") { original.to_string() } else { format!("http://{original}") };
+        return Archived::Wayback(original);
+    }
+    let host = url.split("://").nth(1).unwrap_or(url).split(['/', '?', '#']).next().unwrap_or_default();
+    let is_archive = OTHER_ARCHIVES.iter().any(|a| host == *a || host.ends_with(&format!(".{a}")));
+    if is_archive { Archived::Other } else { Archived::No }
+}
+
 fn strip_namespace<'a>(name: &'a str, prefixes: &[String]) -> &'a str {
     let Some((prefix, rest)) = name.split_once(':') else {
         return name;
@@ -96,6 +142,21 @@ mod tests {
             assert_eq!(file_name(raw, &prefixes).as_deref(), Ok(expected), "{raw}");
         }
         assert_eq!(file_name("no file", &prefixes), Err(ValueError::NotAFile));
+    }
+
+    #[test]
+    fn archives() {
+        let wayback = |u: &str| Archived::Wayback(u.to_string());
+        assert_eq!(
+            archived("https://web.archive.org/web/20150101000000/http://example.org/a?b=c"),
+            wayback("http://example.org/a?b=c")
+        );
+        assert_eq!(archived("http://archive.org/web/2015id_/https://example.org/"), wayback("https://example.org/"));
+        assert_eq!(archived("https://web.archive.org/web/20150101/www.example.org"), wayback("http://www.example.org"));
+        assert_eq!(archived("https://archive.ph/AbCd"), Archived::Other);
+        assert_eq!(archived("https://www.webcitation.org/5xyz"), Archived::Other);
+        assert_eq!(archived("https://example.org/web.archive.org/"), Archived::No);
+        assert_eq!(archived("https://archive.org/details/foo"), Archived::No);
     }
 
     #[test]

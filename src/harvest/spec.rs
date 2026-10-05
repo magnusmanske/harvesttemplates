@@ -2,7 +2,7 @@
 //! to and from the original tool's permalink query string.
 
 use crate::ids::{ItemId, PropertyId};
-use crate::value::{Calendar, Case, Date, DateLimit, DecimalMark, LinkChoice, Relation, TransformSpec};
+use crate::value::{ArchiveUrls, Calendar, Case, Date, DateLimit, DecimalMark, LinkChoice, Relation, TransformSpec};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -91,6 +91,8 @@ pub struct JobSpec {
     /// Only look before the first section heading (#122).
     pub lead_only: bool,
     pub transform: TransformSpec,
+    /// URLs: what to do with links to archived copies.
+    pub archive_urls: ArchiveUrls,
     /// Items: accept a value without `[[link]]` syntax as a page title.
     pub plain_links: bool,
     pub link_choice: LinkChoice,
@@ -131,6 +133,7 @@ impl Default for JobSpec {
             unwrap_templates: false,
             lead_only: false,
             transform: TransformSpec::default(),
+            archive_urls: ArchiveUrls::Original,
             plain_links: true,
             link_choice: LinkChoice::First,
             calendar: Calendar::Gregorian,
@@ -175,6 +178,13 @@ impl JobSpec {
                 "latparam" if !v.is_empty() => coordinate_parameters(&mut spec).latitude = v.to_string(),
                 "lonparam" if !v.is_empty() => coordinate_parameters(&mut spec).longitude = v.to_string(),
                 "pattern" => spec.value_pattern = value.clone(),
+                "archive" => {
+                    spec.archive_urls = match v {
+                        "skip" => ArchiveUrls::Skip,
+                        "keep" => ArchiveUrls::Keep,
+                        _ => ArchiveUrls::Original,
+                    }
+                }
                 "unwrap" => spec.unwrap_templates = v == "1",
                 "lead" => spec.lead_only = v == "1",
                 "case" => {
@@ -275,6 +285,11 @@ impl JobSpec {
         }
         if !self.value_pattern.is_empty() {
             q.push(("pattern", self.value_pattern.clone()));
+        }
+        match self.archive_urls {
+            ArchiveUrls::Original => {}
+            ArchiveUrls::Skip => q.push(("archive", "skip".into())),
+            ArchiveUrls::Keep => q.push(("archive", "keep".into())),
         }
         for (key, on) in [("unwrap", self.unwrap_templates), ("lead", self.lead_only)] {
             if on {
@@ -393,6 +408,7 @@ mod tests {
         spec.value_pattern = "{1}-{2}".into();
         spec.unwrap_templates = true;
         spec.lead_only = true;
+        spec.archive_urls = ArchiveUrls::Skip;
         spec.transform.case = Case::Upper;
         spec.coordinate_parameters = Some(CoordinateParameters { latitude: "lat".into(), longitude: "long".into() });
         spec.qualifiers = vec![
