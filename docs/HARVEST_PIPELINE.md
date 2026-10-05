@@ -35,7 +35,7 @@ message a user can see in the results table.
 | url | `[https://… label]` → URL; must be `http(s)://` without spaces. |
 | commonsMedia | File name without namespace, `_` → space, percent-decoded. Must be on Commons, not only local. |
 | time | See below. Calendar and optional date limit from the spec. |
-| quantity | Any digit script, thousands separators removed, chosen decimal mark. Unit from the spec, must be allowed by the property. |
+| quantity | Any digit script, thousands separators removed, chosen decimal mark. A unit after the number (`82 g`, `2,4 [[kilogram\|kg]]`) is matched against the names, aliases and symbols of the allowed units (or the chosen one); otherwise the chosen unit. |
 | monolingualtext | The value, with the language code from the spec. |
 
 ### Dates
@@ -62,6 +62,7 @@ To add a language, add its month names to `data/monthnames.json`.
 | error | could not find a date / imprecise date / ambiguous date: several years / invalid date | |
 | error | date outside the configured range | date limit |
 | error | unclear number | not a plain decimal number |
+| error | unknown unit '…' | the text after the number names no allowed unit, or more than one |
 | error | no link to a target page / link to a section, not a page | |
 | error | [[X]] does not exist / [[X]] has no Wikidata item | |
 | error | the link points to the page itself | |

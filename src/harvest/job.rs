@@ -10,8 +10,7 @@ use crate::wiki::Site;
 use crate::wiki::site::{NS_TEMPLATE, host_for};
 use crate::wikidata::{ConstraintDef, ConstraintStatus, PropertyInfo};
 use crate::wikitext::TemplateMatcher;
-
-const ALLOWED_UNITS: ItemId = ItemId(21_514_353);
+use std::collections::HashMap;
 
 #[derive(Debug, thiserror::Error)]
 pub enum JobError {
@@ -39,6 +38,8 @@ pub struct Job {
     /// The constraints to check: those selected, plus all mandatory ones.
     pub constraints: Vec<ConstraintDef>,
     pub qualifiers: Vec<PreparedQualifier>,
+    /// Quantities: unit names and symbols (lower case) → unit, for values like `82 g`.
+    pub units: HashMap<String, ItemId>,
 }
 
 #[derive(Debug, Clone)]
@@ -76,8 +77,38 @@ impl Job {
             site.template_matcher(template_names(&template_key, redirects, spec.template_redirects.as_deref()));
         let constraints = selected_constraints(&property, spec.constraints.as_deref());
         let qualifiers = prepare_qualifiers(clients, &spec).await?;
-        Ok(Self { spec, site, property, datatype, template_key, matcher, transform, constraints, qualifiers })
+        let units = if datatype == Datatype::Quantity {
+            unit_names(clients, &property, &spec, &site).await?
+        } else {
+            HashMap::new()
+        };
+        Ok(Self { spec, site, property, datatype, template_key, matcher, transform, constraints, qualifiers, units })
     }
+}
+
+/// Names of the units a value may carry: the allowed ones, or the chosen one.
+/// Names shared by two units are dropped rather than guessed.
+async fn unit_names(
+    clients: &Clients,
+    property: &PropertyInfo,
+    spec: &JobSpec,
+    site: &Site,
+) -> Result<HashMap<String, ItemId>, JobError> {
+    let candidates: Vec<ItemId> = match property.allowed_units() {
+        Some(allowed) => allowed.into_iter().flatten().collect(),
+        None => spec.unit.into_iter().collect(),
+    };
+    let names = clients.wikidata.names(&candidates, &format!("en|{}", site.lang)).await?;
+    let mut map: HashMap<String, Option<ItemId>> = HashMap::new();
+    for (unit, names) in names {
+        for name in names {
+            let entry = map.entry(value::unit_key(&name)).or_insert(Some(unit));
+            if *entry != Some(unit) {
+                *entry = None;
+            }
+        }
+    }
+    Ok(map.into_iter().filter_map(|(name, unit)| Some((name, unit?))).collect())
 }
 
 async fn prepare_qualifiers(clients: &Clients, spec: &JobSpec) -> Result<Vec<PreparedQualifier>, JobError> {
@@ -159,14 +190,7 @@ fn check_property(property: &PropertyInfo, spec: &JobSpec) -> Result<Datatype, J
 
 /// Units must be allowed by the property's "allowed units" constraint, if it has one (#156, #178).
 fn check_unit(property: &PropertyInfo, spec: &JobSpec) -> Result<(), JobError> {
-    let Some(constraint) = property.constraint(ALLOWED_UNITS) else {
-        return Ok(());
-    };
-    let allowed: Vec<Option<ItemId>> = constraint
-        .snaks(crate::ids::PropertyId(2305))
-        .iter()
-        .map(|s| s["datavalue"]["value"]["id"].as_str().and_then(|id| id.parse().ok()))
-        .collect();
+    let Some(allowed) = property.allowed_units() else { return Ok(()) };
     if allowed.contains(&spec.unit) {
         return Ok(());
     }

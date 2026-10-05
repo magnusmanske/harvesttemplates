@@ -16,6 +16,9 @@ const MANDATORY: ItemId = ItemId(21_502_408);
 const SUGGESTION: ItemId = ItemId(62_026_391);
 const DEPRECATED_PROPERTY_CLASSES: [ItemId; 2] = [ItemId(37_911_748), ItemId(18_644_427)];
 const INSTANCE_OF: PropertyId = PropertyId(31);
+const UNIT_SYMBOL: PropertyId = PropertyId(5061);
+const ALLOWED_UNITS: ItemId = ItemId(21_514_353);
+const ITEM_OF_CONSTRAINT: PropertyId = PropertyId(2305);
 
 /// Read access to Wikidata entities.
 #[derive(Debug, Clone)]
@@ -47,6 +50,41 @@ impl Wikidata {
     pub async fn property(&self, id: PropertyId) -> Result<Option<PropertyInfo>> {
         let mut entities = self.entities(&[id.to_string()], "claims|datatype|labels").await?;
         Ok(entities.pop().map(|json| PropertyInfo::from_json(id, &json)))
+    }
+
+    /// Labels, aliases and unit symbols (P5061) of items, in the given languages (`en|de`).
+    pub async fn names(&self, ids: &[ItemId], languages: &str) -> Result<HashMap<ItemId, Vec<String>>> {
+        let mut out = HashMap::new();
+        for chunk in ids.chunks(IDS_PER_REQUEST) {
+            let ids = chunk.iter().map(ItemId::to_string).collect::<Vec<_>>().join("|");
+            let p = params(&[
+                ("action", "wbgetentities"),
+                ("ids", &ids),
+                ("props", "labels|aliases|claims"),
+                ("languages", languages),
+            ]);
+            let json = self.api.get(HOST, &p).await?;
+            for entity in json["entities"].as_object().into_iter().flat_map(Map::values) {
+                let Some(id) = entity["id"].as_str().and_then(|q| q.parse().ok()) else { continue };
+                let labels = entity["labels"].as_object().into_iter().flat_map(Map::values);
+                let aliases = entity["aliases"]
+                    .as_object()
+                    .into_iter()
+                    .flat_map(Map::values)
+                    .flat_map(|a| a.as_array().into_iter().flatten());
+                let symbols = entity["claims"][UNIT_SYMBOL.to_string()]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|c| &c["mainsnak"]["datavalue"]["value"]);
+                let names = labels
+                    .chain(aliases)
+                    .filter_map(|n| n["value"].as_str())
+                    .chain(symbols.filter_map(|v| v["text"].as_str()));
+                out.insert(id, names.map(str::to_string).collect());
+            }
+        }
+        Ok(out)
     }
 
     /// English labels, falling back to the id.
@@ -193,6 +231,13 @@ impl PropertyInfo {
 
     pub fn constraint(&self, kind: ItemId) -> Option<&ConstraintDef> {
         self.constraints.iter().find(|c| c.kind == kind)
+    }
+
+    /// Units allowed by the "allowed units" constraint (`None` = no unit),
+    /// or `None` if the property does not restrict units.
+    pub fn allowed_units(&self) -> Option<Vec<Option<ItemId>>> {
+        let snaks = self.constraint(ALLOWED_UNITS)?.snaks(ITEM_OF_CONSTRAINT).iter();
+        Some(snaks.map(|s| s["datavalue"]["value"]["id"].as_str().and_then(|id| id.parse().ok())).collect())
     }
 }
 

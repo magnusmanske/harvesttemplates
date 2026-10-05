@@ -13,9 +13,6 @@ use axum::{Json, Router};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-const ALLOWED_UNITS: ItemId = ItemId(21_514_353);
-const ITEM_OF_CONSTRAINT: PropertyId = PropertyId(2305);
-
 pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/spec/from-query", get(spec_from_query))
@@ -81,10 +78,7 @@ fn constraint_types(defs: &[ConstraintDef]) -> Vec<(ItemId, ConstraintStatus)> {
 async fn property(State(app): State<SharedState>, Path(id): Path<String>) -> ApiResult<Value> {
     let id: PropertyId = id.parse().map_err(ApiError::BadRequest)?;
     let info = app.clients.wikidata.property(id).await?.ok_or(ApiError::NotFound)?;
-    let units: Option<Vec<Option<ItemId>>> = info.constraint(ALLOWED_UNITS).map(|c| {
-        let snaks = c.snaks(ITEM_OF_CONSTRAINT).iter();
-        snaks.map(|s| s["datavalue"]["value"]["id"].as_str().and_then(|q| q.parse().ok())).collect()
-    });
+    let units = info.allowed_units();
     let mut label_ids: Vec<String> = info.constraints.iter().map(|c| c.kind.to_string()).collect();
     label_ids.extend(units.iter().flatten().flatten().map(ItemId::to_string));
     label_ids.dedup();

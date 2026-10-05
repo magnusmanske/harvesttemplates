@@ -167,7 +167,14 @@ async fn parse_as(
         Datatype::String | Datatype::ExternalId => Ok(Value::String(text)),
         Datatype::Time => time_value(job, value::parse_date(&text, &job.site.lang, spec.calendar).map_err(bad_value)?),
         Datatype::Quantity => {
-            let amount = value::parse_amount(&text, spec.decimal_mark).map_err(bad_value)?;
+            let (number, suffix) = value::split_unit(&text);
+            let amount = value::parse_amount(&number, spec.decimal_mark).map_err(bad_value)?;
+            let unit = match suffix {
+                None => unit,
+                Some(s) => {
+                    Some(*job.units.get(&value::unit_key(&s)).ok_or_else(|| error(format!("unknown unit '{s}'")))?)
+                }
+            };
             Ok(Value::Quantity { amount, unit })
         }
         Datatype::Monolingual => Ok(Value::Monolingual { text, language: spec.language.clone() }),

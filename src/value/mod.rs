@@ -8,7 +8,7 @@ mod time;
 mod transform;
 
 pub use links::{LinkChoice, file_name, link_target, url};
-pub use quantity::{DecimalMark, parse_amount};
+pub use quantity::{DecimalMark, parse_amount, split_unit, unit_key};
 pub use time::{Calendar, Date, DateLimit, Relation, parse_date, parse_date_parts};
 pub use transform::{Transform, TransformSpec};
 

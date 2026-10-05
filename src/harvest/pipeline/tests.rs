@@ -175,3 +175,54 @@ async fn qualifiers_fixed_and_from_parameters() {
     let err = Job::prepare(&clients, typo).await.unwrap_err().to_string();
     assert!(err.starts_with("qualifier P407: 'Q18x60'"), "{err}");
 }
+
+#[tokio::test]
+async fn quantities_with_unit_suffixes() {
+    use crate::test_support::mock;
+    use crate::value::DecimalMark;
+    let (server, clients) = world().await;
+    let unit = |id: &str| json_value(id);
+    mock(&server, "ids=P2067&", serde_json::json!({"entities": {"P2067": {
+        "id": "P2067", "datatype": "quantity",
+        "claims": {"P2302": [{"mainsnak": unit("Q21514353"), "qualifiers": {"P2305": [unit("Q11570"), unit("Q41803"), unit("Q191118")]}}]}
+    }}}))
+    .await;
+    let names = |id: &str, label: &str, symbol: &str, alias: &str| {
+        serde_json::json!({"id": id, "labels": {"en": {"value": label}}, "aliases": {"en": [{"value": alias}]},
+            "claims": {"P5061": [{"mainsnak": {"datavalue": {"value": {"text": symbol, "language": "en"}}}}]}})
+    };
+    mock(
+        &server,
+        "props=labels%7Caliases%7Cclaims",
+        serde_json::json!({"entities": {
+            "Q11570": names("Q11570", "kilogram", "kg", "kilo"),
+            "Q41803": names("Q41803", "gram", "g", "gramme"),
+            "Q191118": names("Q191118", "tonne", "t", "metric ton"),
+            "Q999": names("Q999", "other", "x", "t"),
+        }}),
+    )
+    .await;
+    let spec = JobSpec {
+        property: Some(PropertyId(2067)),
+        template: "X".into(),
+        parameters: vec!["mass".into()],
+        unit: Some(ItemId(11_570)),
+        decimal_mark: DecimalMark::Comma,
+        ..Default::default()
+    };
+    let job = Job::prepare(&clients, spec).await.unwrap();
+    let eval = |text: &'static str| {
+        let (job, clients) = (&job, &clients);
+        async move { evaluate(job, clients, &page(Some(1)), &revision(text)).await.result.map(|e| e.value) }
+    };
+    let qty = |amount: &str, unit: u64| Value::Quantity { amount: amount.into(), unit: Some(ItemId(unit)) };
+    assert_eq!(eval("{{X|mass=82 g}}").await, Ok(qty("+82", 41_803)));
+    assert_eq!(eval("{{X|mass=2,4 [[Kilogram|kg]]}}").await, Ok(qty("+2.4", 11_570)));
+    assert_eq!(eval("{{X|mass=62}}").await, Ok(qty("+62", 11_570)), "no suffix: the chosen unit");
+    assert_eq!(eval("{{X|mass=5 lb}}").await, Err(error("unknown unit 'lb'")));
+    assert_eq!(eval("{{X|mass=5 t}}").await, Err(error("unknown unit 't'")), "ambiguous names are not guessed");
+}
+
+fn json_value(id: &str) -> Json {
+    serde_json::json!({"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"id": id}}})
+}
