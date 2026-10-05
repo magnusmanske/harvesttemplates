@@ -27,11 +27,7 @@ impl Transform {
     pub fn new(spec: TransformSpec) -> Result<Self, regex::Error> {
         let search = match spec.search.as_str() {
             "" => None,
-            pattern => Some(
-                RegexBuilder::new(pattern)
-                    .size_limit(REGEX_SIZE_LIMIT)
-                    .build()?,
-            ),
+            pattern => Some(RegexBuilder::new(pattern).size_limit(REGEX_SIZE_LIMIT).build()?),
         };
         Ok(Self { spec, search })
     }
@@ -39,16 +35,10 @@ impl Transform {
     pub fn apply(&self, value: &str) -> String {
         let s = &self.spec;
         let value = format!("{}{value}{}", s.add_prefix, s.add_suffix);
-        let value = value
-            .strip_prefix(s.remove_prefix.as_str())
-            .unwrap_or(&value);
-        let value = value
-            .strip_suffix(s.remove_suffix.as_str())
-            .unwrap_or(value);
+        let value = value.strip_prefix(s.remove_prefix.as_str()).unwrap_or(&value);
+        let value = value.strip_suffix(s.remove_suffix.as_str()).unwrap_or(value);
         match &self.search {
-            Some(re) => re
-                .replace_all(value, js_replacement(&s.replace))
-                .into_owned(),
+            Some(re) => re.replace_all(value, js_replacement(&s.replace)).into_owned(),
             None => value.to_string(),
         }
     }
@@ -122,9 +112,6 @@ mod tests {
             search: r"(a)\1".into(),
             ..Default::default()
         };
-        assert!(
-            Transform::new(spec).is_err(),
-            "backreferences are not supported"
-        );
+        assert!(Transform::new(spec).is_err(), "backreferences are not supported");
     }
 }

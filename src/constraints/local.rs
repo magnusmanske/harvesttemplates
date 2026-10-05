@@ -29,11 +29,7 @@ pub fn allowed_entity_types(def: &ConstraintDef, _: &Candidate) -> bool {
 }
 
 pub fn allowed_qualifiers(def: &ConstraintDef, c: &Candidate) -> bool {
-    let allowed: Vec<PropertyId> = def
-        .entity_ids(PROPERTY)
-        .iter()
-        .filter_map(|p| p.parse().ok())
-        .collect();
+    let allowed: Vec<PropertyId> = def.entity_ids(PROPERTY).iter().filter_map(|p| p.parse().ok()).collect();
     c.qualifiers.iter().any(|q| !allowed.contains(q))
 }
 
@@ -44,11 +40,7 @@ pub fn allowed_units(def: &ConstraintDef, c: &Candidate) -> bool {
     let allowed: Vec<Option<ItemId>> = def
         .snaks(ITEM_OF_CONSTRAINT)
         .iter()
-        .map(|s| {
-            s["datavalue"]["value"]["id"]
-                .as_str()
-                .and_then(|id| id.parse().ok())
-        })
+        .map(|s| s["datavalue"]["value"]["id"].as_str().and_then(|id| id.parse().ok()))
         .collect();
     !allowed.contains(unit)
 }
@@ -80,11 +72,8 @@ pub fn format(def: &ConstraintDef, c: &Candidate) -> bool {
 
 /// Wikidata format patterns are PCRE; fancy-regex covers what they use. Compiled once per pattern.
 fn compiled(pattern: &str) -> Option<Arc<Regex>> {
-    static CACHE: LazyLock<Mutex<HashMap<String, Option<Arc<Regex>>>>> =
-        LazyLock::new(Default::default);
-    let mut cache = CACHE
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    static CACHE: LazyLock<Mutex<HashMap<String, Option<Arc<Regex>>>>> = LazyLock::new(Default::default);
+    let mut cache = CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     cache
         .entry(pattern.to_string())
         .or_insert_with(|| {
@@ -120,11 +109,7 @@ pub fn item_requires_statement(def: &ConstraintDef, c: &Candidate) -> bool {
 pub fn has_statement(c: &Candidate, property: PropertyId, values: &[ItemId]) -> bool {
     match values {
         [] => c.item.has_property(property),
-        _ => c
-            .item
-            .item_values(property)
-            .iter()
-            .any(|v| values.contains(v)),
+        _ => c.item.item_values(property).iter().any(|v| values.contains(v)),
     }
 }
 
@@ -159,8 +144,7 @@ pub fn range(def: &ConstraintDef, c: &Candidate) -> bool {
         Value::Quantity { amount, .. } => {
             let amount: f64 = amount.parse().unwrap_or(f64::NAN);
             let bound = |p| bound(def, p).and_then(|v| v["amount"].as_str()?.parse::<f64>().ok());
-            bound(MIN_QUANTITY).is_some_and(|min| amount < min)
-                || bound(MAX_QUANTITY).is_some_and(|max| amount > max)
+            bound(MIN_QUANTITY).is_some_and(|min| amount < min) || bound(MAX_QUANTITY).is_some_and(|max| amount > max)
         }
         Value::Time { date, .. } => {
             let bound = |p| date_bound(def, p);
@@ -195,10 +179,7 @@ fn date_bound(def: &ConstraintDef, property: PropertyId) -> Option<Date> {
 }
 
 pub fn single_value(_: &ConstraintDef, c: &Candidate) -> bool {
-    c.item
-        .statements(c.property)
-        .iter()
-        .any(|s| s["rank"] != "deprecated")
+    c.item.statements(c.property).iter().any(|s| s["rank"] != "deprecated")
 }
 
 /// Adding a normal-rank value next to existing normal-rank ones (and no
@@ -238,12 +219,7 @@ mod tests {
         json!([{"snaktype": "value", "datavalue": {"value": s}}])
     }
 
-    fn check(
-        f: fn(&ConstraintDef, &Candidate) -> bool,
-        d: &ConstraintDef,
-        item: &Json,
-        value: Value,
-    ) -> bool {
+    fn check(f: fn(&ConstraintDef, &Candidate) -> bool, d: &ConstraintDef, item: &Json, value: Value) -> bool {
         let entity = Entity::new(item.clone()).unwrap();
         let datatype = match value {
             Value::Quantity { .. } => Datatype::Quantity,
@@ -269,20 +245,12 @@ mod tests {
     fn format_checks() {
         let d = def("Q21502404", json!({"P1793": string_snak(r"tt\d{7,8}")}));
         let empty = item(json!({}));
-        assert!(!check(
-            format,
-            &d,
-            &empty,
-            Value::String("tt0111161".into())
-        ));
+        assert!(!check(format, &d, &empty, Value::String("tt0111161".into())));
         assert!(
             check(format, &d, &empty, Value::String("tt0111161x".into())),
             "anchored"
         );
-        let d = def(
-            "Q21502404",
-            json!({"P1793": string_snak(r"(?i)[a-z]+(?=\d)\d")}),
-        );
+        let d = def("Q21502404", json!({"P1793": string_snak(r"(?i)[a-z]+(?=\d)\d")}));
         assert!(
             !check(format, &d, &empty, Value::String("AB1".into())),
             "flags and lookahead (#161)"
@@ -316,24 +284,15 @@ mod tests {
             !check(allowed_units, &d, &empty, qty("+62", None)),
             "#178: no unit allowed"
         );
-        assert!(check(
-            allowed_units,
-            &d,
-            &empty,
-            qty("+62", Some(ItemId(11_573)))
-        ));
+        assert!(check(allowed_units, &d, &empty, qty("+62", Some(ItemId(11_573)))));
         assert!(!check(integer, &d, &empty, qty("+62.000", None)));
         assert!(check(integer, &d, &empty, qty("+62.5", None)));
     }
 
     #[test]
     fn ranges() {
-        let amount =
-            |a: &str| json!([{"snaktype": "value", "datavalue": {"value": {"amount": a}}}]);
-        let d = def(
-            "Q21510860",
-            json!({"P2313": amount("+0"), "P2312": amount("+100"), }),
-        );
+        let amount = |a: &str| json!([{"snaktype": "value", "datavalue": {"value": {"amount": a}}}]);
+        let d = def("Q21510860", json!({"P2313": amount("+0"), "P2312": amount("+100"), }));
         let empty = item(json!({}));
         let qty = |a: &str| Value::Quantity {
             amount: a.into(),
@@ -347,19 +306,12 @@ mod tests {
             json!({"P2310": time("+1800-00-00T00:00:00Z"), "P2311": [{"snaktype": "somevalue"}]}),
         );
         let date = |year| Value::Time {
-            date: Date {
-                year,
-                month: 0,
-                day: 0,
-            },
+            date: Date { year, month: 0, day: 0 },
             calendar: Calendar::Gregorian,
         };
         assert!(!check(range, &d, &empty, date(1950)));
         assert!(check(range, &d, &empty, date(1700)));
-        assert!(
-            check(range, &d, &empty, date(3000)),
-            "unknown max means now"
-        );
+        assert!(check(range, &d, &empty, date(3000)), "unknown max means now");
     }
 
     #[test]
@@ -381,23 +333,9 @@ mod tests {
             "Q21503247",
             json!({"P2306": item_snaks(&["P31"]), "P2305": item_snaks(&["Q5"])}),
         );
-        let human = item(
-            json!({"P31": [{"rank": "normal", "mainsnak": {"datavalue": {"value": {"id": "Q5"}}}}]}),
-        );
-        let cat = item(
-            json!({"P31": [{"rank": "normal", "mainsnak": {"datavalue": {"value": {"id": "Q146"}}}}]}),
-        );
-        assert!(!check(
-            item_requires_statement,
-            &d,
-            &human,
-            Value::String("x".into())
-        ));
-        assert!(check(
-            item_requires_statement,
-            &d,
-            &cat,
-            Value::String("x".into())
-        ));
+        let human = item(json!({"P31": [{"rank": "normal", "mainsnak": {"datavalue": {"value": {"id": "Q5"}}}}]}));
+        let cat = item(json!({"P31": [{"rank": "normal", "mainsnak": {"datavalue": {"value": {"id": "Q146"}}}}]}));
+        assert!(!check(item_requires_statement, &d, &human, Value::String("x".into())));
+        assert!(check(item_requires_statement, &d, &cat, Value::String("x".into())));
     }
 }

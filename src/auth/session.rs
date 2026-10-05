@@ -36,17 +36,11 @@ pub async fn store(session: &Session, login: &Login) -> Result<(), ApiError> {
         .await
         .map_err(|e| ApiError::Internal(e.into()))?;
     // A new id on every privilege change prevents session fixation.
-    session
-        .cycle_id()
-        .await
-        .map_err(|e| ApiError::Internal(e.into()))
+    session.cycle_id().await.map_err(|e| ApiError::Internal(e.into()))
 }
 
 pub async fn clear(session: &Session) -> Result<(), ApiError> {
-    session
-        .flush()
-        .await
-        .map_err(|e| ApiError::Internal(e.into()))
+    session.flush().await.map_err(|e| ApiError::Internal(e.into()))
 }
 
 pub async fn current_user(session: &Session) -> Option<User> {

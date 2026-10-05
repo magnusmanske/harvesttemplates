@@ -32,10 +32,7 @@ impl TemplateMatcher {
                 .collect(),
             first_letter_case_insensitive,
         };
-        matcher.names = names
-            .into_iter()
-            .map(|n| matcher.normalize(n.as_ref()))
-            .collect();
+        matcher.names = names.into_iter().map(|n| matcher.normalize(n.as_ref())).collect();
         matcher
     }
 
@@ -117,10 +114,7 @@ impl TemplateParams {
 
     /// The value of `name`, if present and non-empty.
     pub fn get(&self, name: &str) -> Option<&str> {
-        self.0
-            .get(name.trim())
-            .map(String::as_str)
-            .filter(|v| !v.is_empty())
+        self.0.get(name.trim()).map(String::as_str).filter(|v| !v.is_empty())
     }
 
     /// The value of the first of `names` that is present and non-empty.
@@ -130,10 +124,7 @@ impl TemplateParams {
 }
 
 fn normalize_spaces(s: &str) -> String {
-    s.replace('_', " ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    s.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn uppercase_first(s: &str) -> String {
@@ -170,10 +161,7 @@ mod tests {
     #[test]
     fn issue_204_spaces_around_pipes() {
         let t = "{{RömppOnline |ID=RD-18-01251 |Name=Rhodamine |Abruf=2016-08-08}}";
-        assert_eq!(
-            get(&["RömppOnline"], t, "ID").as_deref(),
-            Some("RD-18-01251")
-        );
+        assert_eq!(get(&["RömppOnline"], t, "ID").as_deref(), Some("RD-18-01251"));
     }
 
     #[test]
@@ -189,14 +177,8 @@ mod tests {
             get(&["Infobox person"], t, "birth_place").as_deref(),
             Some("[[Paris|the city]]")
         );
-        assert_eq!(
-            get(&["Infobox person"], t, "name").as_deref(),
-            Some("{{lang|fr|Jean}}")
-        );
-        assert_eq!(
-            get(&["Infobox person"], t, "url").as_deref(),
-            Some("http://x.org/?a=b")
-        );
+        assert_eq!(get(&["Infobox person"], t, "name").as_deref(), Some("{{lang|fr|Jean}}"));
+        assert_eq!(get(&["Infobox person"], t, "url").as_deref(), Some("http://x.org/?a=b"));
     }
 
     #[test]
@@ -208,14 +190,7 @@ mod tests {
     #[test]
     fn name_normalisation() {
         assert!(get(&["Infobox person"], "{{infobox_person|a=1}}", "a").is_some());
-        assert!(
-            get(
-                &["Infobox person"],
-                "{{ Template : Infobox  person |a=1}}",
-                "a"
-            )
-            .is_some()
-        );
+        assert!(get(&["Infobox person"], "{{ Template : Infobox  person |a=1}}", "a").is_some());
         assert!(get(&["Normdaten"], "{{Vorlage:Normdaten|GND=1}}", "GND").is_some());
         assert!(get(&["Normdaten"], "{{Other:Normdaten|GND=1}}", "GND").is_none());
     }

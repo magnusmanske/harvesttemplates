@@ -47,14 +47,10 @@ async fn callback(
     Query(q): Query<CallbackQuery>,
 ) -> Result<Redirect, ApiError> {
     let Login::Pending { request, return_to } = session::load(&session).await else {
-        return Err(ApiError::bad_request(
-            "no login in progress; please start again",
-        ));
+        return Err(ApiError::bad_request("no login in progress; please start again"));
     };
     if request.key != q.oauth_token {
-        return Err(ApiError::bad_request(
-            "login token mismatch; please start again",
-        ));
+        return Err(ApiError::bad_request("login token mismatch; please start again"));
     }
     let token = app.oauth.access_token(&request, &q.oauth_verifier).await?;
     let (id, name) = identify(&app.oauth, &app.wikidata_api_url, &token).await?;

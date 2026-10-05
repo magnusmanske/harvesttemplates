@@ -37,21 +37,10 @@ pub struct CategoryStep {
 pub trait PageSource: Send + Sync + std::fmt::Debug {
     /// Pages in `namespace` transcluding the template (directly or through a
     /// redirect), most recently edited first. `template` is a database key.
-    async fn transclusions(
-        &self,
-        site: &Site,
-        template: &str,
-        namespace: i32,
-        limits: Limits,
-    ) -> Result<Vec<Page>>;
+    async fn transclusions(&self, site: &Site, template: &str, namespace: i32, limits: Limits) -> Result<Vec<Page>>;
 
     /// Members of the given categories (database keys).
-    async fn category_step(
-        &self,
-        site: &Site,
-        categories: &[String],
-        namespace: i32,
-    ) -> Result<CategoryStep>;
+    async fn category_step(&self, site: &Site, categories: &[String], namespace: i32) -> Result<CategoryStep>;
 
     /// Ids of pages in `namespace` in `category` or its subcategories, down to
     /// `depth` levels. Each category is visited once, so cycles are harmless.
@@ -106,13 +95,7 @@ pub struct ApiSource {
 
 #[async_trait]
 impl PageSource for ApiSource {
-    async fn transclusions(
-        &self,
-        site: &Site,
-        template: &str,
-        namespace: i32,
-        limits: Limits,
-    ) -> Result<Vec<Page>> {
+    async fn transclusions(&self, site: &Site, template: &str, namespace: i32, limits: Limits) -> Result<Vec<Page>> {
         let ns = namespace.to_string();
         let title = site.full_title(NS_TEMPLATE, template);
         let p = params(&[
@@ -147,12 +130,7 @@ impl PageSource for ApiSource {
         Ok(pages)
     }
 
-    async fn category_step(
-        &self,
-        site: &Site,
-        categories: &[String],
-        namespace: i32,
-    ) -> Result<CategoryStep> {
+    async fn category_step(&self, site: &Site, categories: &[String], namespace: i32) -> Result<CategoryStep> {
         let mut step = CategoryStep::default();
         let namespaces = format!("{namespace}|{NS_CATEGORY}");
         for category in categories {
@@ -167,11 +145,7 @@ impl PageSource for ApiSource {
             ]);
             self.api
                 .query_continue(&site.host, &p, |json| {
-                    for member in json["query"]["categorymembers"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                    {
+                    for member in json["query"]["categorymembers"].as_array().into_iter().flatten() {
                         add_member(&mut step, site, member, namespace);
                     }
                     true
@@ -186,9 +160,7 @@ fn page_from_api(page: &Value) -> Option<Page> {
     Some(Page {
         id: page["pageid"].as_u64()?,
         title: page["title"].as_str()?.to_string(),
-        item: page["pageprops"]["wikibase_item"]
-            .as_str()
-            .and_then(|q| q.parse().ok()),
+        item: page["pageprops"]["wikibase_item"].as_str().and_then(|q| q.parse().ok()),
         latest_revision: page["lastrevid"].as_u64().unwrap_or_default(),
     })
 }
@@ -212,37 +184,18 @@ pub struct WithFallback<P, F> {
 
 #[async_trait]
 impl<P: PageSource, F: PageSource> PageSource for WithFallback<P, F> {
-    async fn transclusions(
-        &self,
-        site: &Site,
-        template: &str,
-        namespace: i32,
-        limits: Limits,
-    ) -> Result<Vec<Page>> {
-        match self
-            .primary
-            .transclusions(site, template, namespace, limits)
-            .await
-        {
+    async fn transclusions(&self, site: &Site, template: &str, namespace: i32, limits: Limits) -> Result<Vec<Page>> {
+        match self.primary.transclusions(site, template, namespace, limits).await {
             Err(e) if !is_limit_error(&e) => {
                 tracing::warn!("replica failed for {}, using the API: {e:#}", site.dbname);
-                self.fallback
-                    .transclusions(site, template, namespace, limits)
-                    .await
+                self.fallback.transclusions(site, template, namespace, limits).await
             }
             result => result,
         }
     }
 
-    async fn category_step(
-        &self,
-        site: &Site,
-        categories: &[String],
-        namespace: i32,
-    ) -> Result<CategoryStep> {
-        self.primary
-            .category_step(site, categories, namespace)
-            .await
+    async fn category_step(&self, site: &Site, categories: &[String], namespace: i32) -> Result<CategoryStep> {
+        self.primary.category_step(site, categories, namespace).await
     }
 
     async fn category_members(
@@ -293,8 +246,7 @@ mod tests {
             for c in cats {
                 let (pages, subs) = self.0.get(c.as_str()).cloned().unwrap_or_default();
                 step.pages.extend(pages);
-                step.subcategories
-                    .extend(subs.into_iter().map(String::from));
+                step.subcategories.extend(subs.into_iter().map(String::from));
             }
             Ok(step)
         }
@@ -332,25 +284,15 @@ mod tests {
     #[tokio::test]
     async fn walks_depth_and_survives_cycles() {
         let (g, site) = (graph(), site());
-        for (depth, expected) in [
-            (0, vec![1, 2]),
-            (1, vec![1, 2, 3, 4]),
-            (10, vec![1, 2, 3, 4, 5]),
-        ] {
-            let pages = g
-                .category_members(&site, "Root", 0, depth, LIMITS)
-                .await
-                .unwrap();
+        for (depth, expected) in [(0, vec![1, 2]), (1, vec![1, 2, 3, 4]), (10, vec![1, 2, 3, 4, 5])] {
+            let pages = g.category_members(&site, "Root", 0, depth, LIMITS).await.unwrap();
             assert_eq!(pages, HashSet::from_iter(expected), "depth {depth}");
         }
     }
 
     #[tokio::test]
     async fn enforces_limits() {
-        let limits = Limits {
-            max_pages: 3,
-            ..LIMITS
-        };
+        let limits = Limits { max_pages: 3, ..LIMITS };
         let err = graph()
             .category_members(&site(), "Root", 0, 5, limits)
             .await

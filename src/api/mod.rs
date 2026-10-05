@@ -53,10 +53,7 @@ pub fn router(state: SharedState) -> Router {
         .layer(CompressionLayer::new())
         .layer(header_layer(header::X_CONTENT_TYPE_OPTIONS, "nosniff"))
         .layer(header_layer(header::X_FRAME_OPTIONS, "DENY"))
-        .layer(header_layer(
-            header::REFERRER_POLICY,
-            "strict-origin-when-cross-origin",
-        ));
+        .layer(header_layer(header::REFERRER_POLICY, "strict-origin-when-cross-origin"));
     Router::new()
         .nest("/api", api)
         .fallback_service(static_files)
@@ -66,10 +63,7 @@ pub fn router(state: SharedState) -> Router {
 
 /// Reject cross-site writes. Together with `SameSite=Lax` cookies this is the CSRF defence.
 async fn same_origin_writes(request: Request, next: Next) -> Response {
-    let safe = matches!(
-        *request.method(),
-        Method::GET | Method::HEAD | Method::OPTIONS
-    );
+    let safe = matches!(*request.method(), Method::GET | Method::HEAD | Method::OPTIONS);
     let headers = request.headers();
     let origin_host = headers
         .get(header::ORIGIN)
@@ -84,10 +78,7 @@ async fn same_origin_writes(request: Request, next: Next) -> Response {
     }
 }
 
-fn header_layer(
-    name: header::HeaderName,
-    value: &'static str,
-) -> SetResponseHeaderLayer<HeaderValue> {
+fn header_layer(name: header::HeaderName, value: &'static str) -> SetResponseHeaderLayer<HeaderValue> {
     SetResponseHeaderLayer::if_not_present(name, HeaderValue::from_static(value))
 }
 
@@ -116,10 +107,7 @@ mod tests {
         if let Some(o) = origin {
             req = req.header(header::ORIGIN, o);
         }
-        app.oneshot(req.body(Body::empty()).unwrap())
-            .await
-            .unwrap()
-            .status()
+        app.oneshot(req.body(Body::empty()).unwrap()).await.unwrap().status()
     }
 
     #[tokio::test]
@@ -133,9 +121,6 @@ mod tests {
             StatusCode::OK
         );
         assert_eq!(status(Method::POST, None).await, StatusCode::OK);
-        assert_eq!(
-            status(Method::GET, Some("https://evil.example")).await,
-            StatusCode::OK
-        );
+        assert_eq!(status(Method::GET, Some("https://evil.example")).await, StatusCode::OK);
     }
 }

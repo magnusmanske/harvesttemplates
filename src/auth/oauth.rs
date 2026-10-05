@@ -53,28 +53,17 @@ impl OAuth {
 
     /// Step 3: trade the request token and verifier for an access token.
     pub async fn access_token(&self, request: &Token, verifier: &str) -> Result<Token> {
-        let extra = [
-            ("oauth_verifier", verifier),
-            ("oauth_token", request.key.as_str()),
-        ];
+        let extra = [("oauth_verifier", verifier), ("oauth_token", request.key.as_str())];
         self.handshake("token", &extra, Some(request)).await
     }
 
-    async fn handshake(
-        &self,
-        step: &str,
-        extra: &[(&str, &str)],
-        token: Option<&Token>,
-    ) -> Result<Token> {
+    async fn handshake(&self, step: &str, extra: &[(&str, &str)], token: Option<&Token>) -> Result<Token> {
         let url = format!("{OAUTH_BASE}/{step}");
         let mut params = self.oauth_params();
         params.push(("format".into(), "json".into()));
         params.extend(extra.iter().map(|(k, v)| (k.to_string(), v.to_string())));
         let token_secret = token.map_or("", |t| t.secret.expose());
-        params.push((
-            "oauth_signature".into(),
-            self.sign("GET", &url, &params, token_secret),
-        ));
+        params.push(("oauth_signature".into(), self.sign("GET", &url, &params, token_secret)));
         let json: Value = self
             .http
             .get(&url)
@@ -91,10 +80,7 @@ impl OAuth {
     /// edit request could save twice.
     pub async fn post(&self, api_url: &str, params: &Params, token: &Token) -> Result<Value> {
         let mut form = params.clone();
-        form.extend([
-            ("format".into(), "json".into()),
-            ("formatversion".into(), "2".into()),
-        ]);
+        form.extend([("format".into(), "json".into()), ("formatversion".into(), "2".into())]);
         let mut header = self.oauth_params();
         header.push(("oauth_token".into(), token.key.clone()));
         let signed: Params = form.iter().chain(&header).cloned().collect();
@@ -121,9 +107,7 @@ impl OAuth {
     }
 
     fn oauth_params(&self) -> Params {
-        let nonce: String = (0..16)
-            .map(|_| format!("{:02x}", rand::random::<u8>()))
-            .collect();
+        let nonce: String = (0..16).map(|_| format!("{:02x}", rand::random::<u8>())).collect();
         let timestamp = chrono::Utc::now().timestamp().to_string();
         vec![
             ("oauth_consumer_key".into(), self.consumer_key.clone()),
@@ -135,24 +119,12 @@ impl OAuth {
     }
 
     fn sign(&self, method: &str, url: &str, params: &Params, token_secret: &str) -> String {
-        sign(
-            method,
-            url,
-            params,
-            self.consumer_secret.expose(),
-            token_secret,
-        )
+        sign(method, url, params, self.consumer_secret.expose(), token_secret)
     }
 }
 
 /// RFC 5849 §3.4 HMAC-SHA1 signature. `url` must not contain a query string.
-fn sign(
-    method: &str,
-    url: &str,
-    params: &Params,
-    consumer_secret: &str,
-    token_secret: &str,
-) -> String {
+fn sign(method: &str, url: &str, params: &Params, consumer_secret: &str, token_secret: &str) -> String {
     let mut pairs: Vec<(String, String)> = params
         .iter()
         .filter(|(k, _)| k != "oauth_signature")
@@ -164,15 +136,9 @@ fn sign(
         .map(|(k, v)| format!("{k}={v}"))
         .collect::<Vec<_>>()
         .join("&");
-    let base = format!(
-        "{}&{}&{}",
-        method.to_uppercase(),
-        encode(url),
-        encode(&normalized)
-    );
+    let base = format!("{}&{}&{}", method.to_uppercase(), encode(url), encode(&normalized));
     let key = format!("{}&{}", encode(consumer_secret), encode(token_secret));
-    let mut mac =
-        Hmac::<Sha1>::new_from_slice(key.as_bytes()).expect("HMAC accepts any key length");
+    let mut mac = Hmac::<Sha1>::new_from_slice(key.as_bytes()).expect("HMAC accepts any key length");
     mac.update(base.as_bytes());
     base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes())
 }
@@ -186,12 +152,7 @@ fn parse_token(json: &Value) -> Result<Token> {
     if let Some(err) = json.get("error").or_else(|| json.get("message")) {
         bail!("{err}");
     }
-    let field = |name: &str| {
-        json[name]
-            .as_str()
-            .filter(|s| !s.is_empty())
-            .map(str::to_string)
-    };
+    let field = |name: &str| json[name].as_str().filter(|s| !s.is_empty()).map(str::to_string);
     match (field("key"), field("secret")) {
         (Some(key), Some(secret)) => Ok(Token {
             key,

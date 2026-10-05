@@ -39,9 +39,7 @@ impl Wdqs {
     }
 
     pub async fn ask(&self, sparql: &str) -> Result<bool> {
-        Ok(self.query(sparql).await?["boolean"]
-            .as_bool()
-            .unwrap_or(false))
+        Ok(self.query(sparql).await?["boolean"].as_bool().unwrap_or(false))
     }
 
     /// Item ids bound to `var` in the results of a SELECT query.
@@ -55,20 +53,13 @@ impl Wdqs {
 
     /// The Wikidata item of a wiki, via "Wikimedia database name" (P1800).
     pub async fn edition_for(&self, dbname: &str) -> Result<Option<ItemId>> {
-        let sparql = format!(
-            "SELECT ?wiki {{ ?wiki wdt:P1800 {} }}",
-            string_literal(dbname)
-        );
+        let sparql = format!("SELECT ?wiki {{ ?wiki wdt:P1800 {} }}", string_literal(dbname));
         Ok(self.select_items(&sparql, "wiki").await?.into_iter().next())
     }
 
     /// Which of `items` already have a statement for `property` (any rank, any value).
     /// Bounded by the number of candidates, unlike asking for every item with the property.
-    pub async fn items_with_property(
-        &self,
-        property: PropertyId,
-        items: &[ItemId],
-    ) -> Result<HashSet<ItemId>> {
+    pub async fn items_with_property(&self, property: PropertyId, items: &[ItemId]) -> Result<HashSet<ItemId>> {
         let mut found = HashSet::new();
         for chunk in items.chunks(VALUES_CHUNK) {
             let values: Vec<String> = chunk.iter().map(|q| format!("wd:{q}")).collect();
@@ -83,9 +74,7 @@ impl Wdqs {
 }
 
 pub fn item_from_uri(uri: &str) -> Option<ItemId> {
-    uri.strip_prefix("http://www.wikidata.org/entity/")?
-        .parse()
-        .ok()
+    uri.strip_prefix("http://www.wikidata.org/entity/")?.parse().ok()
 }
 
 /// A SPARQL string literal; JSON escaping is a valid subset of SPARQL escaping.
@@ -103,10 +92,7 @@ mod tests {
     #[test]
     fn literals_are_escaped() {
         assert_eq!(string_literal(r#"a"b\c"#), r#""a\"b\\c""#);
-        assert_eq!(
-            item_from_uri("http://www.wikidata.org/entity/Q42"),
-            Some(ItemId(42))
-        );
+        assert_eq!(item_from_uri("http://www.wikidata.org/entity/Q42"), Some(ItemId(42)));
         assert_eq!(item_from_uri("http://www.wikidata.org/entity/P42"), None);
     }
 
@@ -115,20 +101,17 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(body_string_contains("p%3AP345"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(
-                json!({"results": {"bindings": [
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({"results": {"bindings": [
                     {"item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q1"}}
-                ]}}),
-            ))
+                ]}})),
+            )
             .expect(2)
             .mount(&server)
             .await;
         let wdqs = Wdqs::new(reqwest::Client::new(), &server.uri());
         let items: Vec<ItemId> = (1..=300).map(ItemId).collect();
-        let found = wdqs
-            .items_with_property(PropertyId(345), &items)
-            .await
-            .unwrap();
+        let found = wdqs.items_with_property(PropertyId(345), &items).await.unwrap();
         assert_eq!(found, HashSet::from([ItemId(1)]));
     }
 }

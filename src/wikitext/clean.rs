@@ -2,8 +2,7 @@ use super::scan::{find_top_level, scan_call};
 use regex::Regex;
 use std::sync::LazyLock;
 
-static LINK_LABEL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\[\[([^\[\]|]*)\|[^\[\]]*\]\]").unwrap());
+static LINK_LABEL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[\[([^\[\]|]*)\|[^\[\]]*\]\]").unwrap());
 static BOLD_ITALIC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"'{2,}").unwrap());
 
 /// Reduce a raw parameter value to the text a value parser should see:
@@ -43,10 +42,7 @@ mod tests {
     fn cases() {
         let cases = [
             ("[[Paris|the city]]", "[[Paris]]"),
-            (
-                "[[File:A b.jpg|300px]]<br/>caption",
-                "[[File:A b.jpg]]<br/>caption",
-            ),
+            ("[[File:A b.jpg|300px]]<br/>caption", "[[File:A b.jpg]]<br/>caption"),
             ("'''bold''' and ''italic''", "bold and italic"),
             ("1&nbsp;000", "1 000"),
             ("{{flag|FR}} [[France]]", "[[France]]"),

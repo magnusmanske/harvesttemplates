@@ -46,11 +46,7 @@ pub struct ConstraintType {
     rule: Rule,
 }
 
-const fn local(
-    id: u64,
-    name: &'static str,
-    f: fn(&ConstraintDef, &Candidate) -> bool,
-) -> ConstraintType {
+const fn local(id: u64, name: &'static str, f: fn(&ConstraintDef, &Candidate) -> bool) -> ConstraintType {
     ConstraintType {
         id: ItemId(id),
         name,
@@ -68,11 +64,7 @@ const fn remote(id: u64, name: &'static str, r: Remote) -> ConstraintType {
 
 /// Every supported constraint type.
 pub static TYPES: [ConstraintType; 23] = [
-    local(
-        52_004_125,
-        "allowed entity types",
-        local::allowed_entity_types,
-    ),
+    local(52_004_125, "allowed entity types", local::allowed_entity_types),
     local(21_510_851, "allowed qualifiers", local::allowed_qualifiers),
     local(21_514_353, "allowed units", local::allowed_units),
     local(54_554_025, "citation needed", local::citation_needed),
@@ -82,16 +74,8 @@ pub static TYPES: [ConstraintType; 23] = [
     local(21_502_404, "format", local::format),
     local(52_848_401, "integer", local::integer),
     remote(21_510_855, "inverse", Remote::Inverse),
-    local(
-        21_503_247,
-        "item requires statement",
-        local::item_requires_statement,
-    ),
-    local(
-        21_510_856,
-        "mandatory qualifier",
-        local::mandatory_qualifier,
-    ),
+    local(21_503_247, "item requires statement", local::item_requires_statement),
+    local(21_510_856, "mandatory qualifier", local::mandatory_qualifier),
     local(51_723_761, "no bounds", local::no_bounds),
     local(52_558_054, "none of", local::none_of),
     local(21_510_859, "one of", local::one_of),
@@ -101,11 +85,7 @@ pub static TYPES: [ConstraintType; 23] = [
     local(52_060_874, "single best value", local::single_best_value),
     remote(21_510_862, "symmetric", Remote::Symmetric),
     remote(21_503_250, "type", Remote::Type),
-    remote(
-        21_510_864,
-        "value requires statement",
-        Remote::ValueRequiresStatement,
-    ),
+    remote(21_510_864, "value requires statement", Remote::ValueRequiresStatement),
     remote(21_510_865, "value type", Remote::ValueType),
 ];
 

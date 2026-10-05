@@ -56,12 +56,7 @@ impl Editor {
     }
 
     /// Add new statements to an item in one edit.
-    pub async fn add_statements(
-        &mut self,
-        item: ItemId,
-        statements: &[Value],
-        summary: &str,
-    ) -> Result<(), EditError> {
+    pub async fn add_statements(&mut self, item: ItemId, statements: &[Value], summary: &str) -> Result<(), EditError> {
         let data = json!({ "claims": statements }).to_string();
         let item = item.to_string();
         for _ in 0..2 {
@@ -81,9 +76,7 @@ impl Editor {
                 _ => return outcome(&response),
             }
         }
-        Err(EditError::Fatal(
-            "Wikidata keeps rejecting the edit token".into(),
-        ))
+        Err(EditError::Fatal("Wikidata keeps rejecting the edit token".into()))
     }
 
     async fn csrf(&mut self) -> Result<String, EditError> {
@@ -95,9 +88,7 @@ impl Editor {
         let token = response["query"]["tokens"]["csrftoken"]
             .as_str()
             .filter(|t| *t != "+\\")
-            .ok_or_else(|| {
-                EditError::Fatal("not logged in to Wikidata; please log in again".into())
-            })?;
+            .ok_or_else(|| EditError::Fatal("not logged in to Wikidata; please log in again".into()))?;
         self.csrf = Some(token.to_string());
         Ok(token.to_string())
     }
@@ -123,11 +114,7 @@ fn outcome(response: &Value) -> Result<(), EditError> {
 }
 
 /// The Wikidata account behind an access token.
-pub async fn identify(
-    oauth: &OAuth,
-    api_url: &str,
-    token: &Token,
-) -> anyhow::Result<(u64, String)> {
+pub async fn identify(oauth: &OAuth, api_url: &str, token: &Token) -> anyhow::Result<(u64, String)> {
     let p = params(&[("action", "query"), ("meta", "userinfo")]);
     let info = oauth.post(api_url, &p, token).await?["query"]["userinfo"].clone();
     match (info["id"].as_u64(), info["name"].as_str(), info.get("anon")) {
@@ -179,25 +166,16 @@ mod tests {
         .await;
         respond(&server, "action=wbeditentity", json!({"success": 1})).await;
         let mut ed = editor(server.uri());
-        ed.add_statements(ItemId(1), &[json!({})], "s")
-            .await
-            .unwrap();
+        ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
         let requests = server.received_requests().await.unwrap();
-        let auth = requests[1]
-            .headers
-            .get("authorization")
-            .unwrap()
-            .to_str()
-            .unwrap();
+        let auth = requests[1].headers.get("authorization").unwrap().to_str().unwrap();
         assert!(auth.starts_with("OAuth ") && auth.contains("oauth_signature="));
         assert!(String::from_utf8_lossy(&requests[1].body).contains("maxlag=5"));
     }
 
     #[test]
     fn error_classes() {
-        let err = |code: &str| {
-            outcome(&json!({"error": {"code": code, "info": "msg", "lag": 12.3}})).unwrap_err()
-        };
+        let err = |code: &str| outcome(&json!({"error": {"code": code, "info": "msg", "lag": 12.3}})).unwrap_err();
         assert!(matches!(err("maxlag"), EditError::Busy(d) if d == Duration::from_secs(12)));
         assert!(matches!(err("blocked"), EditError::Fatal(_)));
         assert!(matches!(err("modification-failed"), EditError::Rejected(m) if m == "msg"));

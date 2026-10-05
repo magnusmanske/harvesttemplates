@@ -66,12 +66,7 @@ mod tests {
 
     #[test]
     fn statement_with_reference() {
-        let source = Source::new(
-            Some(ItemId(328)),
-            "en.wikipedia.org",
-            "The Shawshank Redemption",
-            123,
-        );
+        let source = Source::new(Some(ItemId(328)), "en.wikipedia.org", "The Shawshank Redemption", 123);
         let s = statement(
             PropertyId(345),
             Datatype::ExternalId,
@@ -82,10 +77,7 @@ mod tests {
         assert_eq!(s["mainsnak"]["datatype"], "external-id");
         assert_eq!(s["mainsnak"]["datavalue"]["value"], "tt0111161");
         let reference = &s["references"][0];
-        assert_eq!(
-            reference["snaks"]["P143"][0]["datavalue"]["value"]["id"],
-            "Q328"
-        );
+        assert_eq!(reference["snaks"]["P143"][0]["datavalue"]["value"]["id"], "Q328");
         assert_eq!(
             reference["snaks"]["P4656"][0]["datavalue"]["value"],
             "https://en.wikipedia.org/w/index.php?title=The_Shawshank_Redemption&oldid=123"

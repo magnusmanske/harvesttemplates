@@ -36,10 +36,7 @@ impl Wikidata {
                 ("languages", "en"),
             ]);
             let json = self.api.get(HOST, &p).await?;
-            let entities = json["entities"]
-                .as_object()
-                .into_iter()
-                .flat_map(Map::values);
+            let entities = json["entities"].as_object().into_iter().flat_map(Map::values);
             out.extend(entities.filter(|e| e.get("missing").is_none()).cloned());
         }
         Ok(out)
@@ -53,12 +50,8 @@ impl Wikidata {
     }
 
     pub async fn property(&self, id: PropertyId) -> Result<Option<PropertyInfo>> {
-        let mut entities = self
-            .entities(&[id.to_string()], "claims|datatype|labels")
-            .await?;
-        Ok(entities
-            .pop()
-            .map(|json| PropertyInfo::from_json(id, &json)))
+        let mut entities = self.entities(&[id.to_string()], "claims|datatype|labels").await?;
+        Ok(entities.pop().map(|json| PropertyInfo::from_json(id, &json)))
     }
 
     /// English labels, falling back to the id.
@@ -68,10 +61,7 @@ impl Wikidata {
             .iter()
             .filter_map(|e| {
                 let id = e["id"].as_str()?.to_string();
-                let label = e["labels"]["en"]["value"]
-                    .as_str()
-                    .unwrap_or(&id)
-                    .to_string();
+                let label = e["labels"]["en"]["value"].as_str().unwrap_or(&id).to_string();
                 Some((id, label))
             })
             .collect())
@@ -119,12 +109,7 @@ impl Entity {
     pub fn item_values(&self, property: PropertyId) -> Vec<ItemId> {
         self.statements(property)
             .iter()
-            .filter_map(|s| {
-                s["mainsnak"]["datavalue"]["value"]["id"]
-                    .as_str()?
-                    .parse()
-                    .ok()
-            })
+            .filter_map(|s| s["mainsnak"]["datavalue"]["value"]["id"].as_str()?.parse().ok())
             .collect()
     }
 
@@ -199,9 +184,7 @@ impl ConstraintDef {
     }
 
     pub fn first_property(&self, property: PropertyId) -> Option<PropertyId> {
-        self.entity_ids(property)
-            .iter()
-            .find_map(|id| id.parse().ok())
+        self.entity_ids(property).iter().find_map(|id| id.parse().ok())
     }
 
     pub fn first_string(&self, property: PropertyId) -> Option<&str> {

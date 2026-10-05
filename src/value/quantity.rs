@@ -13,10 +13,8 @@ pub enum DecimalMark {
     Comma,
 }
 
-static THOUSANDS: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"([0-9])(?:&nbsp;|\s|'|’|\u{202f})([0-9])").unwrap());
-static NUMBER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^([+-]?)0*([0-9]+(?:\.[0-9]+)?)$").unwrap());
+static THOUSANDS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([0-9])(?:&nbsp;|\s|'|’|\u{202f})([0-9])").unwrap());
+static NUMBER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([+-]?)0*([0-9]+(?:\.[0-9]+)?)$").unwrap());
 
 /// Parse a decimal number into a Wikibase amount string such as `+1234.5`.
 pub fn parse_amount(raw: &str, mark: DecimalMark) -> Result<String, ValueError> {
@@ -28,9 +26,7 @@ pub fn parse_amount(raw: &str, mark: DecimalMark) -> Result<String, ValueError> 
         DecimalMark::Point => text.replace(',', ""),
         DecimalMark::Comma => text.replace('.', "").replace(',', "."),
     };
-    let caps = NUMBER
-        .captures(text.trim())
-        .ok_or(ValueError::UnclearNumber)?;
+    let caps = NUMBER.captures(text.trim()).ok_or(ValueError::UnclearNumber)?;
     let sign = if &caps[1] == "-" { "-" } else { "+" };
     let digits = &caps[2];
     let digits = if digits.starts_with('.') {
@@ -69,11 +65,7 @@ mod tests {
     #[test]
     fn unclear() {
         for raw in ["82 g", "1.2.3", "", ".", "abc", "1-2"] {
-            assert_eq!(
-                parse_amount(raw, Point),
-                Err(ValueError::UnclearNumber),
-                "{raw}"
-            );
+            assert_eq!(parse_amount(raw, Point), Err(ValueError::UnclearNumber), "{raw}");
         }
     }
 }

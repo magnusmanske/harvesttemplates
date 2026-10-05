@@ -142,9 +142,7 @@ impl Value {
                 let parse = |s: &str| s.parse::<f64>().ok();
                 matches!((v["amount"].as_str().and_then(parse), parse(amount)), (Some(a), Some(b)) if (a - b).abs() < f64::EPSILON)
             }
-            Self::Monolingual { text, language } => {
-                v["text"] == text.as_str() && v["language"] == language.as_str()
-            }
+            Self::Monolingual { text, language } => v["text"] == text.as_str() && v["language"] == language.as_str(),
         }
     }
 
@@ -154,10 +152,7 @@ impl Value {
             Self::Item(q) => q.to_string(),
             Self::String(s) => s.clone(),
             Self::Time { date, .. } => date.wikibase_time(),
-            Self::Quantity {
-                amount,
-                unit: Some(u),
-            } => format!("{amount} {u}"),
+            Self::Quantity { amount, unit: Some(u) } => format!("{amount} {u}"),
             Self::Quantity { amount, unit: None } => amount.clone(),
             Self::Monolingual { text, language } => format!("{text} ({language})"),
         }
@@ -241,8 +236,7 @@ mod tests {
 
     #[test]
     fn matching_existing_values() {
-        let time =
-            |time: &str, precision: u8| json!({"value": {"time": time, "precision": precision}});
+        let time = |time: &str, precision: u8| json!({"value": {"time": time, "precision": precision}});
         let year = Value::Time {
             date: Date {
                 year: 1950,

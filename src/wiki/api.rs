@@ -14,10 +14,7 @@ pub struct MwApi {
 pub type Params = Vec<(String, String)>;
 
 pub fn params(pairs: &[(&str, &str)]) -> Params {
-    pairs
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect()
+    pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
 }
 
 impl MwApi {
@@ -44,10 +41,7 @@ impl MwApi {
     /// One request. Long parameter lists (e.g. 50 page ids) go as POST.
     pub async fn get(&self, host: &str, params: &Params) -> Result<Value> {
         let mut form = params.clone();
-        form.extend([
-            ("format".into(), "json".into()),
-            ("formatversion".into(), "2".into()),
-        ]);
+        form.extend([("format".into(), "json".into()), ("formatversion".into(), "2".into())]);
         let json = send_json(self.http.post(self.api_url(host)).form(&form)).await?;
         match json.get("error") {
             Some(err) => Err(anyhow!("API error from {host}: {err}")),
@@ -56,12 +50,7 @@ impl MwApi {
     }
 
     /// Follow `continue` until done or `f` returns `false`. `f` sees each response.
-    pub async fn query_continue(
-        &self,
-        host: &str,
-        params: &Params,
-        mut f: impl FnMut(&Value) -> bool,
-    ) -> Result<()> {
+    pub async fn query_continue(&self, host: &str, params: &Params, mut f: impl FnMut(&Value) -> bool) -> Result<()> {
         let mut params = params.clone();
         loop {
             let json = self.get(host, &params).await?;
@@ -72,9 +61,7 @@ impl MwApi {
                 return Ok(());
             };
             for (key, value) in cont {
-                let value = value
-                    .as_str()
-                    .map_or_else(|| value.to_string(), str::to_string);
+                let value = value.as_str().map_or_else(|| value.to_string(), str::to_string);
                 params.retain(|(k, _)| k != key);
                 params.push((key.clone(), value));
             }
@@ -93,9 +80,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(body_string_contains("gticontinue=next"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"query": {"n": 2}})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"query": {"n": 2}})))
             .mount(&server)
             .await;
         Mock::given(method("POST"))
@@ -119,10 +104,7 @@ mod tests {
     async fn api_errors_are_errors() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"error": {"code": "badvalue"}})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"error": {"code": "badvalue"}})))
             .mount(&server)
             .await;
         let api = MwApi::with_base_url(reqwest::Client::new(), server.uri());

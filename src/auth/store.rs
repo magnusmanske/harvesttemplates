@@ -44,10 +44,7 @@ fn backend(e: impl std::fmt::Display) -> Error {
 #[async_trait]
 impl SessionStore for FileSessionStore {
     async fn create(&self, record: &mut Record) -> Result<()> {
-        while tokio::fs::try_exists(self.path(&record.id))
-            .await
-            .map_err(backend)?
-        {
+        while tokio::fs::try_exists(self.path(&record.id)).await.map_err(backend)? {
             record.id = Id::default();
         }
         self.save(record).await
@@ -69,8 +66,7 @@ impl SessionStore for FileSessionStore {
             Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(backend(e)),
         };
-        let record: Record =
-            serde_json::from_slice(&bytes).map_err(|e| Error::Decode(e.to_string()))?;
+        let record: Record = serde_json::from_slice(&bytes).map_err(|e| Error::Decode(e.to_string()))?;
         if record.expiry_date < time::OffsetDateTime::now_utc() {
             self.delete(id).await?;
             return Ok(None);
@@ -105,10 +101,7 @@ mod tests {
         let store = FileSessionStore::new(dir.path().join("s")).unwrap();
         let mut live = record(Duration::hours(1));
         store.create(&mut live).await.unwrap();
-        assert_eq!(
-            store.load(&live.id).await.unwrap().map(|r| r.id),
-            Some(live.id)
-        );
+        assert_eq!(store.load(&live.id).await.unwrap().map(|r| r.id), Some(live.id));
         store.delete(&live.id).await.unwrap();
         assert!(store.load(&live.id).await.unwrap().is_none());
 

@@ -129,10 +129,9 @@ impl Default for HarvestConfig {
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("cannot read config file {}", path.display()))?;
-        serde_json::from_str(&text)
-            .with_context(|| format!("invalid config file {}", path.display()))
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("cannot read config file {}", path.display()))?;
+        serde_json::from_str(&text).with_context(|| format!("invalid config file {}", path.display()))
     }
 }
 

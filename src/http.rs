@@ -18,9 +18,7 @@ pub async fn send_json(request: RequestBuilder) -> Result<Value> {
 async fn send_json_with_delay(request: RequestBuilder, base_delay: Duration) -> Result<Value> {
     let mut delay = base_delay;
     for attempt in 1..=MAX_ATTEMPTS {
-        let req = request
-            .try_clone()
-            .context("request body is not retryable")?;
+        let req = request.try_clone().context("request body is not retryable")?;
         match attempt_once(req).await {
             Attempt::Done(result) => return result,
             Attempt::Retry(_, reason) if attempt == MAX_ATTEMPTS => bail!("{reason}"),
@@ -60,13 +58,7 @@ fn is_transient(status: StatusCode) -> bool {
 }
 
 fn retry_after(resp: &reqwest::Response) -> Option<Duration> {
-    let secs = resp
-        .headers()
-        .get(RETRY_AFTER)?
-        .to_str()
-        .ok()?
-        .parse()
-        .ok()?;
+    let secs = resp.headers().get(RETRY_AFTER)?.to_str().ok()?.parse().ok()?;
     Some(Duration::from_secs(secs))
 }
 
@@ -89,9 +81,7 @@ mod tests {
             .mount(&server)
             .await;
         let req = reqwest::Client::new().get(server.uri());
-        let json = send_json_with_delay(req, Duration::from_millis(1))
-            .await
-            .unwrap();
+        let json = send_json_with_delay(req, Duration::from_millis(1)).await.unwrap();
         assert_eq!(json["ok"], true);
     }
 
@@ -104,10 +94,6 @@ mod tests {
             .mount(&server)
             .await;
         let req = reqwest::Client::new().get(server.uri());
-        assert!(
-            send_json_with_delay(req, Duration::from_millis(1))
-                .await
-                .is_err()
-        );
+        assert!(send_json_with_delay(req, Duration::from_millis(1)).await.is_err());
     }
 }

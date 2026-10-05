@@ -30,12 +30,7 @@ pub enum Remote {
 
 impl Remote {
     /// `true` on violation.
-    pub async fn violated(
-        self,
-        def: &ConstraintDef,
-        c: &Candidate<'_>,
-        s: Services<'_>,
-    ) -> Result<bool> {
+    pub async fn violated(self, def: &ConstraintDef, c: &Candidate<'_>, s: Services<'_>) -> Result<bool> {
         let q = c.item.id;
         let value_item = match c.value {
             Value::Item(v) => Some(*v),
@@ -46,10 +41,7 @@ impl Remote {
             (Self::ConflictsWith, _) => conflicts_with(def, c, s).await,
             (Self::Distinct, _) => distinct(c, s).await,
             (Self::Inverse, Some(v)) => match def.first_property(PROPERTY) {
-                Some(inverse) => Ok(!s
-                    .wdqs
-                    .ask(&format!("ASK {{ wd:{v} wdt:{inverse} wd:{q} }}"))
-                    .await?),
+                Some(inverse) => Ok(!s.wdqs.ask(&format!("ASK {{ wd:{v} wdt:{inverse} wd:{q} }}")).await?),
                 None => Ok(false),
             },
             (Self::Symmetric, Some(v)) => Ok(!s
@@ -58,9 +50,7 @@ impl Remote {
                 .await?),
             (Self::Type, _) => {
                 let direct = c.item.item_values(INSTANCE_OF);
-                if relation(def) != "wdt:P279"
-                    && def.items(CLASS).iter().any(|class| direct.contains(class))
-                {
+                if relation(def) != "wdt:P279" && def.items(CLASS).iter().any(|class| direct.contains(class)) {
                     return Ok(false);
                 }
                 in_class(&format!("wd:{q}"), def, s).await.map(|ok| !ok)
@@ -152,9 +142,7 @@ async fn conflicts_with(def: &ConstraintDef, c: &Candidate<'_>, s: Services<'_>)
 async fn distinct(c: &Candidate<'_>, s: Services<'_>) -> Result<bool> {
     let key = match c.value {
         Value::Item(q) => Some(q.to_string()),
-        Value::String(v) if !v.contains(|ch: char| ch.is_whitespace() || ch == '"') => {
-            Some(v.clone())
-        }
+        Value::String(v) if !v.contains(|ch: char| ch.is_whitespace() || ch == '"') => Some(v.clone()),
         _ => None,
     };
     let Some(key) = key else {
@@ -206,18 +194,12 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(body_string_contains("haswbstatement%3AP345%3Dtt1"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(json!({"query": {"search": [{"title": "Q1"}]}})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"query": {"search": [{"title": "Q1"}]}})))
             .mount(&server)
             .await;
         Mock::given(method("POST"))
             .and(body_string_contains("haswbstatement%3AP345%3Dtt2"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(json!({"query": {"search": [{"title": "Q9"}]}})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"query": {"search": [{"title": "Q9"}]}})))
             .mount(&server)
             .await;
         let http = reqwest::Client::new();
@@ -225,10 +207,7 @@ mod tests {
             MwApi::with_base_url(http.clone(), server.uri()),
             Wdqs::new(http, &server.uri()),
         );
-        let s = Services {
-            wdqs: &wdqs,
-            mw: &mw,
-        };
+        let s = Services { wdqs: &wdqs, mw: &mw };
         let item = Entity::new(json!({"id": "Q1", "claims": {}})).unwrap();
         for (value, expected) in [("tt1", false), ("tt2", true)] {
             let value = Value::String(value.into());
@@ -240,10 +219,7 @@ mod tests {
                 qualifiers: &[],
             };
             assert_eq!(
-                Remote::Distinct
-                    .violated(&def(json!({})), &c, s)
-                    .await
-                    .unwrap(),
+                Remote::Distinct.violated(&def(json!({})), &c, s).await.unwrap(),
                 expected
             );
         }
@@ -251,37 +227,27 @@ mod tests {
 
     #[test]
     fn sparql_fragments() {
-        let d =
-            def(json!({"P2305": [{"snaktype": "value", "datavalue": {"value": {"id": "Q5"}}}]}));
+        let d = def(json!({"P2305": [{"snaktype": "value", "datavalue": {"value": {"id": "Q5"}}}]}));
         assert_eq!(object_filter(&d), "?v . VALUES ?v { wd:Q5 }");
         assert_eq!(object_filter(&def(json!({}))), "[]");
-        let either = def(
-            json!({"P2309": [{"snaktype": "value", "datavalue": {"value": {"id": "Q30208840"}}}]}),
-        );
+        let either = def(json!({"P2309": [{"snaktype": "value", "datavalue": {"value": {"id": "Q30208840"}}}]}));
         assert_eq!(relation(&either), "(wdt:P31|wdt:P279)");
     }
 
     #[tokio::test]
     #[ignore = "requires database / external services — run with cargo test -- --ignored"]
     async fn live_sparql_is_valid() {
-        let http = crate::app_state::http_client(
-            "HarvestTemplates tests (https://github.com/magnusmanske/harvesttemplates)",
-        )
-        .unwrap();
+        let http =
+            crate::app_state::http_client("HarvestTemplates tests (https://github.com/magnusmanske/harvesttemplates)")
+                .unwrap();
         let (mw, wdqs) = (
             MwApi::new(http.clone()),
             Wdqs::new(http, crate::wikidata::wdqs::ENDPOINT),
         );
-        let s = Services {
-            wdqs: &wdqs,
-            mw: &mw,
-        };
+        let s = Services { wdqs: &wdqs, mw: &mw };
         let item = |c| Entity::new(json!({"id": "Q42", "claims": c})).unwrap();
-        let human =
-            def(json!({"P2308": [{"snaktype": "value", "datavalue": {"value": {"id": "Q5"}}}]}));
-        let film = def(
-            json!({"P2308": [{"snaktype": "value", "datavalue": {"value": {"id": "Q11424"}}}]}),
-        );
+        let human = def(json!({"P2308": [{"snaktype": "value", "datavalue": {"value": {"id": "Q5"}}}]}));
+        let film = def(json!({"P2308": [{"snaktype": "value", "datavalue": {"value": {"id": "Q11424"}}}]}));
         let value = Value::String("nm0010930".into());
         let no_p31 = item(json!({}));
         let c = |i| Candidate {
@@ -318,10 +284,7 @@ mod tests {
             qualifiers: &[],
         };
         assert!(
-            Remote::Distinct
-                .violated(&def(json!({})), &c2, s)
-                .await
-                .unwrap(),
+            Remote::Distinct.violated(&def(json!({})), &c2, s).await.unwrap(),
             "Fred Astaire has nm0000001"
         );
         let file = Value::String("Douglas adams portrait cropped.jpg".into());
@@ -332,13 +295,7 @@ mod tests {
             value: &file,
             qualifiers: &[],
         };
-        let in_file_ns =
-            def(json!({"P2307": [{"snaktype": "value", "datavalue": {"value": "File"}}]}));
-        assert!(
-            !Remote::CommonsLink
-                .violated(&in_file_ns, &c3, s)
-                .await
-                .unwrap()
-        );
+        let in_file_ns = def(json!({"P2307": [{"snaktype": "value", "datavalue": {"value": "File"}}]}));
+        assert!(!Remote::CommonsLink.violated(&in_file_ns, &c3, s).await.unwrap());
     }
 }

@@ -66,10 +66,7 @@ impl Date {
 
     /// The Wikibase `time` string, e.g. `+1950-01-00T00:00:00Z`.
     pub fn wikibase_time(&self) -> String {
-        format!(
-            "+{:04}-{:02}-{:02}T00:00:00Z",
-            self.year, self.month, self.day
-        )
+        format!("+{:04}-{:02}-{:02}T00:00:00Z", self.year, self.month, self.day)
     }
 
     pub const fn earliest(&self) -> Self {
@@ -127,8 +124,7 @@ pub fn parse_date(raw: &str, lang: &str, calendar: Calendar) -> Result<Date, Val
     let lang = LangPatterns::get(lang);
     for re in pattern_order(lang) {
         if let Some(caps) = re.captures(&text) {
-            return date_from(&caps, lang.map(|l| &l.months), calendar)
-                .ok_or(ValueError::InvalidDate);
+            return date_from(&caps, lang.map(|l| &l.months), calendar).ok_or(ValueError::InvalidDate);
         }
     }
     year_only(&text, calendar)
@@ -143,10 +139,7 @@ pub fn parse_date_parts(
     lang: &str,
     calendar: Calendar,
 ) -> Result<Date, ValueError> {
-    let year: i64 = to_ascii_digits(year)
-        .trim()
-        .parse()
-        .map_err(|_| ValueError::NoDate)?;
+    let year: i64 = to_ascii_digits(year).trim().parse().map_err(|_| ValueError::NoDate)?;
     let months = LangPatterns::get(lang).map(|l| &l.months);
     let month = match month.map(str::trim).filter(|m| !m.is_empty()) {
         Some(m) => month_number(&to_ascii_digits(m), months).ok_or(ValueError::InvalidDate)?,
@@ -174,19 +167,13 @@ fn pattern_order(lang: Option<&LangPatterns>) -> Vec<&Regex> {
     order
 }
 
-fn date_from(
-    caps: &Captures,
-    months: Option<&HashMap<String, u8>>,
-    calendar: Calendar,
-) -> Option<Date> {
+fn date_from(caps: &Captures, months: Option<&HashMap<String, u8>>, calendar: Calendar) -> Option<Date> {
     let year = caps.name("y")?.as_str().parse().ok()?;
     let month = match caps.name("m") {
         Some(m) => month_number(m.as_str(), months)?,
         None => 0,
     };
-    let day = caps
-        .name("d")
-        .map_or(Some(0), |d| d.as_str().parse().ok())?;
+    let day = caps.name("d").map_or(Some(0), |d| d.as_str().parse().ok())?;
     Date::new(year, month, day, calendar)
 }
 
@@ -218,18 +205,14 @@ fn year_only(text: &str, calendar: Calendar) -> Result<Date, ValueError> {
     Date::new(year, 0, 0, calendar).ok_or(ValueError::InvalidDate)
 }
 
-const ROMAN: [&str; 12] = [
-    "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII",
-];
+const ROMAN: [&str; 12] = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 const ROMAN_ALT: &str = "XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I";
 const YEAR_END: &str = r"(?-u:\b)";
 
-static IMPRECISE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\b(?:años|vor|nach|ungefähr|ca|circa|around|about|before|after)\b|\?").unwrap()
-});
+static IMPRECISE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\b(?:años|vor|nach|ungefähr|ca|circa|around|about|before|after)\b|\?").unwrap());
 static BARE_YEAR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9]{1,4}$").unwrap());
-static FOUR_DIGITS: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?-u:\b)[0-9]{4}(?-u:\b)").unwrap());
+static FOUR_DIGITS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?-u:\b)[0-9]{4}(?-u:\b)").unwrap());
 static ISO: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(
         r"(?-u:\b)(?P<y>[0-9]{{3,4}})-(?P<m>[0-9]{{1,2}})-(?P<d>[0-9]{{1,2}}){YEAR_END}"
@@ -263,16 +246,10 @@ struct LangPatterns {
     month_year: Regex,
 }
 
-static MONTH_NAMES: LazyLock<HashMap<String, HashMap<String, u8>>> = LazyLock::new(|| {
-    serde_json::from_str(include_str!("../../data/monthnames.json")).expect("valid monthnames.json")
-});
+static MONTH_NAMES: LazyLock<HashMap<String, HashMap<String, u8>>> =
+    LazyLock::new(|| serde_json::from_str(include_str!("../../data/monthnames.json")).expect("valid monthnames.json"));
 static LANG_PATTERNS: LazyLock<HashMap<&'static str, OnceLock<LangPatterns>>> =
-    LazyLock::new(|| {
-        MONTH_NAMES
-            .keys()
-            .map(|k| (k.as_str(), OnceLock::new()))
-            .collect()
-    });
+    LazyLock::new(|| MONTH_NAMES.keys().map(|k| (k.as_str(), OnceLock::new())).collect());
 
 impl LangPatterns {
     fn get(lang: &str) -> Option<&'static Self> {
@@ -289,10 +266,7 @@ impl LangPatterns {
             .map(|n| regex::escape(n))
             .collect::<Vec<_>>()
             .join("|");
-        let (d, y) = (
-            r"(?-u:\b)(?P<d>[0-9]{1,2})",
-            format!(r"(?P<y>[0-9]{{3,4}}){YEAR_END}"),
-        );
+        let (d, y) = (r"(?-u:\b)(?P<d>[0-9]{1,2})", format!(r"(?P<y>[0-9]{{3,4}}){YEAR_END}"));
         let compile = |p: String| Regex::new(&format!("(?i){p}")).expect("escaped month names");
         Self {
             day_month_year: compile(format!(
@@ -310,8 +284,7 @@ impl LangPatterns {
 
 /// Lower-cased names plus three-letter abbreviations that identify a single month.
 fn with_abbreviations(names: &HashMap<String, u8>) -> HashMap<String, u8> {
-    let mut months: HashMap<String, u8> =
-        names.iter().map(|(n, &m)| (n.to_lowercase(), m)).collect();
+    let mut months: HashMap<String, u8> = names.iter().map(|(n, &m)| (n.to_lowercase(), m)).collect();
     let mut abbreviations: HashMap<String, Option<u8>> = HashMap::new();
     for (name, &month) in &months {
         if name.chars().count() > 3 {
@@ -380,10 +353,7 @@ mod tests {
         assert_eq!(parse("los años 1410", "es"), Err(ValueError::ImpreciseDate)); // #31
         assert_eq!(parse("c. 1900?", "en"), Err(ValueError::ImpreciseDate));
         assert_eq!(parse("1950–1960", "en"), Err(ValueError::AmbiguousDate));
-        assert_eq!(
-            parse("31 February 1950", "en"),
-            Err(ValueError::InvalidDate)
-        );
+        assert_eq!(parse("31 February 1950", "en"), Err(ValueError::InvalidDate));
         assert_eq!(parse("unknown", "en"), Err(ValueError::NoDate));
         assert_eq!(parse("19501", "en"), Err(ValueError::NoDate));
     }

@@ -5,8 +5,7 @@ use regex::Regex;
 use std::sync::LazyLock;
 
 static WIKILINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[\[([^|\]]+)").unwrap());
-static EXTERNAL_LINK: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\[([^\s\]]+)(?:\s[^\]]*)?\]").unwrap());
+static EXTERNAL_LINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[([^\s\]]+)(?:\s[^\]]*)?\]").unwrap());
 
 /// Which link to use when a value contains several.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
@@ -20,14 +19,8 @@ pub enum LinkChoice {
 
 /// Title of the linked page. Without a wikilink, the whole value is used
 /// only if `allow_plain` is set ("match target page even without wikisyntax").
-pub fn link_target(
-    value: &str,
-    allow_plain: bool,
-    choice: LinkChoice,
-) -> Result<String, ValueError> {
-    let mut links = WIKILINK
-        .captures_iter(value)
-        .map(|c| c[1].trim().to_string());
+pub fn link_target(value: &str, allow_plain: bool, choice: LinkChoice) -> Result<String, ValueError> {
+    let mut links = WIKILINK.captures_iter(value).map(|c| c[1].trim().to_string());
     let target = match choice {
         LinkChoice::First => links.next(),
         LinkChoice::Last => links.last(),
@@ -51,11 +44,7 @@ pub fn file_name(value: &str, prefixes: &[String]) -> Result<String, ValueError>
         .map_or(value, |c| c.get(1).map_or(value, |m| m.as_str()));
     let name = strip_namespace(name.trim(), prefixes);
     let name = urlencoding::decode(name).map_or_else(|_| name.to_string(), |d| d.into_owned());
-    let name = name
-        .replace('_', " ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let name = name.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ");
     if name.is_empty() || !name.contains('.') {
         return Err(ValueError::NotAFile);
     }
@@ -110,14 +99,8 @@ mod tests {
             link_target("born in [[Paris]], [[France]]", false, LinkChoice::Last).as_deref(),
             Ok("France")
         );
-        assert_eq!(
-            link_target("Paris", true, LinkChoice::First).as_deref(),
-            Ok("Paris")
-        );
-        assert_eq!(
-            link_target("Paris", false, LinkChoice::First),
-            Err(ValueError::NoLink)
-        );
+        assert_eq!(link_target("Paris", true, LinkChoice::First).as_deref(), Ok("Paris"));
+        assert_eq!(link_target("Paris", false, LinkChoice::First), Err(ValueError::NoLink));
         assert_eq!(
             link_target("[[Paris#History]]", false, LinkChoice::First),
             Err(ValueError::SectionLink)
@@ -150,10 +133,7 @@ mod tests {
             url("[https://example.org/ Example]").as_deref(),
             Ok("https://example.org/")
         );
-        assert_eq!(
-            url("http://example.org").as_deref(),
-            Ok("http://example.org")
-        );
+        assert_eq!(url("http://example.org").as_deref(), Ok("http://example.org"));
         assert_eq!(url("example.org"), Err(ValueError::NotAUrl));
     }
 }

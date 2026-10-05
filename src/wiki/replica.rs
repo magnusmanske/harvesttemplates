@@ -44,8 +44,7 @@ impl Replicas {
             Some((host, port)) => (host.to_string(), port.parse().unwrap_or(c.port)),
             None => (c.host_pattern.replace("{dbname}", dbname), c.port),
         };
-        let constraints =
-            PoolConstraints::new(0, c.max_connections_per_wiki.max(1)).unwrap_or_default();
+        let constraints = PoolConstraints::new(0, c.max_connections_per_wiki.max(1)).unwrap_or_default();
         let opts = OptsBuilder::default()
             .ip_or_hostname(host)
             .tcp_port(port)
@@ -78,19 +77,10 @@ const CATEGORY_SQL: &str = "SELECT page_id, page_namespace, page_title
 
 #[async_trait]
 impl PageSource for Replicas {
-    async fn transclusions(
-        &self,
-        site: &Site,
-        template: &str,
-        namespace: i32,
-        limits: Limits,
-    ) -> Result<Vec<Page>> {
+    async fn transclusions(&self, site: &Site, template: &str, namespace: i32, limits: Limits) -> Result<Vec<Page>> {
         let mut conn = self.conn(&site.dbname).await?;
         let rows: Vec<(u64, Vec<u8>, u64, Option<Vec<u8>>)> = conn
-            .exec(
-                TRANSCLUSIONS_SQL,
-                (template, namespace, limits.max_pages + 1),
-            )
+            .exec(TRANSCLUSIONS_SQL, (template, namespace, limits.max_pages + 1))
             .await?;
         if rows.len() > limits.max_pages {
             bail!(
@@ -111,18 +101,12 @@ impl PageSource for Replicas {
         Ok(pages)
     }
 
-    async fn category_step(
-        &self,
-        site: &Site,
-        categories: &[String],
-        namespace: i32,
-    ) -> Result<CategoryStep> {
+    async fn category_step(&self, site: &Site, categories: &[String], namespace: i32) -> Result<CategoryStep> {
         let mut conn = self.conn(&site.dbname).await?;
         let mut step = CategoryStep::default();
         for chunk in categories.chunks(IN_LIST_CHUNK) {
             let sql = CATEGORY_SQL.replace("{}", &vec!["?"; chunk.len()].join(","));
-            let mut args: Vec<mysql_async::Value> =
-                chunk.iter().map(|c| c.as_str().into()).collect();
+            let mut args: Vec<mysql_async::Value> = chunk.iter().map(|c| c.as_str().into()).collect();
             args.push(namespace.into());
             let rows: Vec<(u64, i32, Vec<u8>)> = conn.exec(sql, args).await?;
             for (id, ns, title) in rows {
@@ -130,8 +114,7 @@ impl PageSource for Replicas {
                     step.pages.push(id);
                 }
                 if ns == NS_CATEGORY {
-                    step.subcategories
-                        .push(String::from_utf8_lossy(&title).into_owned());
+                    step.subcategories.push(String::from_utf8_lossy(&title).into_owned());
                 }
             }
         }
@@ -157,21 +140,13 @@ mod tests {
     async fn replica_matches_api_on_enwiki() {
         let config = Config::load("config.json".as_ref()).unwrap();
         let http = crate::app_state::http_client(&config.user_agent).unwrap();
-        let api = ApiSource {
-            api: MwApi::new(http),
-        };
+        let api = ApiSource { api: MwApi::new(http) };
         let replicas = Replicas::new(config.replicas);
         let site = Site::load(&api.api, "en.wikipedia.org").await.unwrap();
 
         let template = site.db_key(10, "Template:Coord missing");
-        let from_db = replicas
-            .transclusions(&site, &template, 0, LIMITS)
-            .await
-            .unwrap();
-        let from_api = api
-            .transclusions(&site, &template, 0, LIMITS)
-            .await
-            .unwrap();
+        let from_db = replicas.transclusions(&site, &template, 0, LIMITS).await.unwrap();
+        let from_api = api.transclusions(&site, &template, 0, LIMITS).await.unwrap();
         assert!(!from_db.is_empty());
         let diff = from_db.len().abs_diff(from_api.len());
         assert!(
@@ -183,14 +158,8 @@ mod tests {
         assert!(from_db.iter().filter(|p| p.item.is_some()).count() * 2 > from_db.len());
 
         let category = site.db_key(14, "Category:Airports in Berlin");
-        let from_db = replicas
-            .category_members(&site, &category, 0, 2, LIMITS)
-            .await
-            .unwrap();
-        let from_api = api
-            .category_members(&site, &category, 0, 2, LIMITS)
-            .await
-            .unwrap();
+        let from_db = replicas.category_members(&site, &category, 0, 2, LIMITS).await.unwrap();
+        let from_api = api.category_members(&site, &category, 0, 2, LIMITS).await.unwrap();
         assert!(!from_db.is_empty());
         assert_eq!(from_db, from_api);
     }
