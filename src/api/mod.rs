@@ -46,8 +46,8 @@ pub fn router(state: SharedState) -> Router {
         .nest("/runs", runs::routes())
         .nest("/shares", shares::routes())
         .merge(meta::routes())
-        .layer(middleware::from_fn(same_origin_writes))
-        .layer(sessions);
+        .layer(middleware::from_fn(same_origin_writes));
+    let callback = auth::callback_path(&state.config.oauth.callback_url);
     let static_files = ServeDir::new(&state.config.server.html_dir);
     let middleware = ServiceBuilder::new()
         .layer(TraceLayer::new_for_http())
@@ -62,7 +62,9 @@ pub fn router(state: SharedState) -> Router {
         .layer(header_layer(header::REFERRER_POLICY, "strict-origin-when-cross-origin"));
     Router::new()
         .nest("/api", api)
+        .route(&callback, get(auth::callback))
         .fallback_service(static_files)
+        .layer(sessions)
         .layer(middleware)
         .with_state(state)
 }
@@ -118,7 +120,7 @@ mod tests {
 
     async fn call(method: Method, uri: &str, body: &str) -> (StatusCode, serde_json::Value) {
         let sessions = tempfile::tempdir().unwrap();
-        let store = crate::storage::Store::new("mysql://nobody@127.0.0.1:1/none", 1).unwrap();
+        let store = crate::storage::Store::from_url("mysql://nobody@127.0.0.1:1/none", 1).unwrap();
         let app = router(crate::test_support::test_app(
             store,
             "http://127.0.0.1:1",

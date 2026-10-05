@@ -171,7 +171,7 @@ async fn live_preview_on_enwiki() {
     let config = crate::config::Config::load("config.json".as_ref()).unwrap();
     let clients = Clients::new(&crate::app_state::http_client(&config.user_agent).unwrap());
     let source = WithFallback {
-        primary: Replicas::new(config.replicas),
+        primary: Replicas::new(config.replicas, config.db_user),
         fallback: ApiSource {
             api: clients.mw.clone(),
         },

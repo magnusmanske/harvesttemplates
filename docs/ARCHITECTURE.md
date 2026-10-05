@@ -30,7 +30,7 @@ browser ──▶ api/ ──┬─▶ harvest/ (jobs, pipeline, workers)
 | `wiki` | Site metadata, MediaWiki API client, replica pools, page sources. |
 | `wikidata` | Entity/property reads, WDQS, statement JSON. |
 | `constraints` | The 23 supported constraint types, local-first. |
-| `auth` | OAuth 1.0a, session store, `Editor` for `wbeditentity`. |
+| `auth` | OAuth 2 login and token refresh, session store, `Editor` for `wbeditentity`. |
 | `storage` | All SQL. Schema in `storage/schema.sql`, applied at startup. |
 
 ## A run's life
@@ -51,8 +51,11 @@ POST /api/runs ─▶ loading ─▶ ready ─┬─▶ previewing ─▶ ready
    page revision and item, then edited. Rows become `done`, `skipped` or `error`.
 4. **Stop** or a restart leaves the run `paused`; starting again continues.
 
-The OAuth token of the user who pressed *start* lives only in that worker's
-memory and in the user's session file. Nothing secret is stored in the database.
+OAuth tokens live only in the user's session file and in process memory;
+nothing secret is stored in the database. Access tokens last a few hours, so
+workers refresh them. MediaWiki rotates refresh tokens on use, which makes the
+copy in the session stale: `auth::TokenCache` keeps the freshest token per user.
+After a restart, a stale session means logging in again.
 
 ## Design decisions
 

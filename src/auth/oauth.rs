@@ -1,208 +1,213 @@
-//! OAuth 1.0a against MediaWiki, signed by hand (HMAC-SHA1), as in mix'n'match.
+//! OAuth 2.0 against MediaWiki: authorization code grant, Bearer tokens, refresh.
 
 use crate::config::{OauthConfig, Secret};
+use crate::storage::now;
 use crate::wiki::api::Params;
 use anyhow::{Context, Result, anyhow, bail};
-use base64::Engine;
-use hmac::{Hmac, KeyInit, Mac};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha1::Sha1;
 
-const OAUTH_BASE: &str = "https://www.mediawiki.org/wiki/Special:OAuth";
+const OAUTH2_BASE: &str = "https://meta.wikimedia.org/w/rest.php/oauth2";
+/// Refresh this many seconds before expiry, so a token never lapses mid-request.
+const EXPIRY_MARGIN: i64 = 300;
 
-/// A request or access token.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Token {
-    pub key: String,
-    pub secret: Secret,
+    pub access: Secret,
+    pub refresh: Option<Secret>,
+    /// Unix seconds.
+    pub expires_at: i64,
+}
+
+impl Token {
+    pub fn is_expiring(&self) -> bool {
+        now() + EXPIRY_MARGIN >= self.expires_at
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CallError {
+    #[error("the login has expired or was revoked")]
+    Unauthorized,
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 #[derive(Debug, Clone)]
 pub struct OAuth {
     http: reqwest::Client,
-    consumer_key: String,
-    consumer_secret: Secret,
-    callback_url: String,
+    client_id: String,
+    client_secret: Secret,
+    base: String,
 }
 
 impl OAuth {
     pub fn new(http: reqwest::Client, config: &OauthConfig) -> Self {
+        Self::with_base(http, config, OAUTH2_BASE)
+    }
+
+    /// Tests point this at a mock server.
+    pub fn with_base(http: reqwest::Client, config: &OauthConfig, base: &str) -> Self {
         Self {
             http,
-            consumer_key: config.consumer_key.clone(),
-            consumer_secret: config.consumer_secret.clone(),
-            callback_url: config.callback_url.clone(),
+            client_id: config.client_id.clone(),
+            client_secret: config.client_secret.clone(),
+            base: base.to_string(),
         }
     }
 
-    /// Step 1: a one-shot request token.
-    pub async fn request_token(&self) -> Result<Token> {
-        let extra = [("oauth_callback", self.callback_url.as_str())];
-        self.handshake("initiate", &extra, None).await
-    }
-
-    /// Step 2: where to send the user to approve.
-    pub fn authorize_url(&self, request: &Token) -> String {
+    /// Where to send the user to approve. `state` must come back unchanged.
+    pub fn authorize_url(&self, state: &str) -> String {
+        let (id, state) = (urlencoding::encode(&self.client_id), urlencoding::encode(state));
         format!(
-            "{OAUTH_BASE}/authorize?oauth_token={}&oauth_consumer_key={}",
-            encode(&request.key),
-            encode(&self.consumer_key)
+            "{}/authorize?response_type=code&client_id={id}&state={state}",
+            self.base
         )
     }
 
-    /// Step 3: trade the request token and verifier for an access token.
-    pub async fn access_token(&self, request: &Token, verifier: &str) -> Result<Token> {
-        let extra = [("oauth_verifier", verifier), ("oauth_token", request.key.as_str())];
-        self.handshake("token", &extra, Some(request)).await
+    pub async fn exchange_code(&self, code: &str) -> Result<Token> {
+        self.token_request(&[("grant_type", "authorization_code"), ("code", code)])
+            .await
     }
 
-    async fn handshake(&self, step: &str, extra: &[(&str, &str)], token: Option<&Token>) -> Result<Token> {
-        let url = format!("{OAUTH_BASE}/{step}");
-        let mut params = self.oauth_params();
-        params.push(("format".into(), "json".into()));
-        params.extend(extra.iter().map(|(k, v)| (k.to_string(), v.to_string())));
-        let token_secret = token.map_or("", |t| t.secret.expose());
-        params.push(("oauth_signature".into(), self.sign("GET", &url, &params, token_secret)));
+    /// A new token from the refresh token. MediaWiki rotates refresh tokens:
+    /// the old one stops working once this succeeds.
+    pub async fn refresh(&self, token: &Token) -> Result<Token> {
+        let refresh = token.refresh.as_ref().context("no refresh token")?;
+        self.token_request(&[("grant_type", "refresh_token"), ("refresh_token", refresh.expose())])
+            .await
+    }
+
+    async fn token_request(&self, grant: &[(&str, &str)]) -> Result<Token> {
+        let mut form = grant.to_vec();
+        form.extend([
+            ("client_id", self.client_id.as_str()),
+            ("client_secret", self.client_secret.expose()),
+        ]);
+        let response = self
+            .http
+            .post(format!("{}/access_token", self.base))
+            .form(&form)
+            .send()
+            .await?;
+        let status = response.status();
+        let json: Value = response.json().await.context("token response is not JSON")?;
+        if !status.is_success() {
+            let reason = ["error_description", "message", "error"]
+                .iter()
+                .find_map(|k| json[k].as_str());
+            bail!("token request refused: {}", reason.unwrap_or("unknown reason"));
+        }
+        let access = json["access_token"].as_str().context("no access token")?;
+        Ok(Token {
+            access: Secret::from(access),
+            refresh: json["refresh_token"].as_str().map(Secret::from),
+            expires_at: now() + json["expires_in"].as_i64().unwrap_or(3600),
+        })
+    }
+
+    /// The user's central id and name.
+    pub async fn profile(&self, token: &Token) -> Result<(u64, String)> {
+        let url = format!("{}/resource/profile", self.base);
         let json: Value = self
             .http
-            .get(&url)
-            .query(&params)
+            .get(url)
+            .bearer_auth(token.access.expose())
             .send()
             .await?
             .error_for_status()?
             .json()
             .await?;
-        parse_token(&json).with_context(|| format!("OAuth {step} failed"))
+        let id = json["sub"].as_u64().or_else(|| json["sub"].as_str()?.parse().ok());
+        match (id, json["username"].as_str()) {
+            (Some(id), Some(name)) => Ok((id, name.to_string())),
+            _ => Err(anyhow!("the OAuth profile has no user")),
+        }
     }
 
-    /// An API POST signed with the user's access token. Not retried: a repeated
-    /// edit request could save twice.
-    pub async fn post(&self, api_url: &str, params: &Params, token: &Token) -> Result<Value> {
+    /// An authenticated MediaWiki API POST.
+    pub async fn post(&self, api_url: &str, params: &Params, token: &Token) -> Result<Value, CallError> {
         let mut form = params.clone();
         form.extend([("format".into(), "json".into()), ("formatversion".into(), "2".into())]);
-        let mut header = self.oauth_params();
-        header.push(("oauth_token".into(), token.key.clone()));
-        let signed: Params = form.iter().chain(&header).cloned().collect();
-        header.push((
-            "oauth_signature".into(),
-            self.sign("POST", api_url, &signed, token.secret.expose()),
-        ));
-        let authorization = header
-            .iter()
-            .map(|(k, v)| format!("{}=\"{}\"", encode(k), encode(v)))
-            .collect::<Vec<_>>();
-        let response = self
-            .http
-            .post(api_url)
-            .header(
-                reqwest::header::AUTHORIZATION,
-                format!("OAuth {}", authorization.join(", ")),
-            )
-            .form(&form)
-            .send()
-            .await?
-            .error_for_status()?;
-        Ok(response.json().await?)
-    }
-
-    fn oauth_params(&self) -> Params {
-        let nonce: String = (0..16).map(|_| format!("{:02x}", rand::random::<u8>())).collect();
-        let timestamp = chrono::Utc::now().timestamp().to_string();
-        vec![
-            ("oauth_consumer_key".into(), self.consumer_key.clone()),
-            ("oauth_version".into(), "1.0".into()),
-            ("oauth_nonce".into(), nonce),
-            ("oauth_timestamp".into(), timestamp),
-            ("oauth_signature_method".into(), "HMAC-SHA1".into()),
-        ]
-    }
-
-    fn sign(&self, method: &str, url: &str, params: &Params, token_secret: &str) -> String {
-        sign(method, url, params, self.consumer_secret.expose(), token_secret)
-    }
-}
-
-/// RFC 5849 §3.4 HMAC-SHA1 signature. `url` must not contain a query string.
-fn sign(method: &str, url: &str, params: &Params, consumer_secret: &str, token_secret: &str) -> String {
-    let mut pairs: Vec<(String, String)> = params
-        .iter()
-        .filter(|(k, _)| k != "oauth_signature")
-        .map(|(k, v)| (encode(k), encode(v)))
-        .collect();
-    pairs.sort();
-    let normalized = pairs
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join("&");
-    let base = format!("{}&{}&{}", method.to_uppercase(), encode(url), encode(&normalized));
-    let key = format!("{}&{}", encode(consumer_secret), encode(token_secret));
-    let mut mac = Hmac::<Sha1>::new_from_slice(key.as_bytes()).expect("HMAC accepts any key length");
-    mac.update(base.as_bytes());
-    base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes())
-}
-
-/// RFC 3986 percent-encoding (same as PHP `rawurlencode`).
-fn encode(s: &str) -> String {
-    urlencoding::encode(s).into_owned()
-}
-
-fn parse_token(json: &Value) -> Result<Token> {
-    if let Some(err) = json.get("error").or_else(|| json.get("message")) {
-        bail!("{err}");
-    }
-    let field = |name: &str| json[name].as_str().filter(|s| !s.is_empty()).map(str::to_string);
-    match (field("key"), field("secret")) {
-        (Some(key), Some(secret)) => Ok(Token {
-            key,
-            secret: Secret::from(secret.as_str()),
-        }),
-        _ => Err(anyhow!("response has no token")),
+        let request = self.http.post(api_url).bearer_auth(token.access.expose()).form(&form);
+        let response = request.send().await.map_err(anyhow::Error::from)?;
+        if matches!(response.status(), StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+            return Err(CallError::Unauthorized);
+        }
+        let json: Value = response
+            .error_for_status()
+            .map_err(anyhow::Error::from)?
+            .json()
+            .await
+            .map_err(anyhow::Error::from)?;
+        if json["error"]["code"]
+            .as_str()
+            .is_some_and(|c| c.starts_with("mwoauth-"))
+        {
+            return Err(CallError::Unauthorized);
+        }
+        Ok(json)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+    use wiremock::matchers::{body_string_contains, header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    /// RFC 5849 §1.2 example request.
+    pub fn config() -> OauthConfig {
+        OauthConfig {
+            client_id: "cid".into(),
+            client_secret: Secret::from("cs"),
+            callback_url: "x".into(),
+        }
+    }
+
     #[test]
-    fn signature_matches_rfc5849() {
-        let params: Params = [
-            ("oauth_consumer_key", "dpf43f3p2l4k3l03"),
-            ("oauth_token", "nnch734d00sl2jdk"),
-            ("oauth_nonce", "kllo9940pd9333jh"),
-            ("oauth_timestamp", "1191242096"),
-            ("oauth_signature_method", "HMAC-SHA1"),
-            ("oauth_version", "1.0"),
-            ("file", "vacation.jpg"),
-            ("size", "original"),
-        ]
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
-        let sig = sign(
-            "GET",
-            "http://photos.example.net/photos",
-            &params,
-            "kd94hf93k423kf44",
-            "pfkkdhi9sl3r4s00",
+    fn authorize_url() {
+        let oauth = OAuth::new(reqwest::Client::new(), &config());
+        let url = oauth.authorize_url("s t");
+        assert_eq!(
+            url,
+            "https://meta.wikimedia.org/w/rest.php/oauth2/authorize?response_type=code&client_id=cid&state=s%20t"
         );
-        assert_eq!(sig, "tR3+Ty81lMeYAr/Fid0kMTYa/WM=");
     }
 
-    #[test]
-    fn encoding_is_rfc3986() {
-        assert_eq!(encode("a b+c~._-"), "a%20b%2Bc~._-");
-        assert_eq!(encode("ö"), "%C3%B6");
-    }
-
-    #[test]
-    fn token_parsing() {
-        let t = parse_token(&serde_json::json!({"key": "k", "secret": "s"})).unwrap();
-        assert_eq!(t.key, "k");
-        assert!(parse_token(&serde_json::json!({"error": "mwoauth-invalid"})).is_err());
-        assert!(parse_token(&serde_json::json!({"key": ""})).is_err());
+    #[tokio::test]
+    async fn code_exchange_profile_and_refusal() {
+        let server = MockServer::start().await;
+        Mock::given(path("/access_token"))
+            .and(body_string_contains("code=good"))
+            .and(body_string_contains("client_secret=cs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "token_type": "Bearer", "expires_in": 14400, "access_token": "A", "refresh_token": "R"
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(path("/access_token"))
+            .respond_with(
+                ResponseTemplate::new(400).set_body_json(json!({"error": "invalid_grant", "message": "bad code"})),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/resource/profile"))
+            .and(header("authorization", "Bearer A"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"sub": 12345, "username": "Example"})))
+            .mount(&server)
+            .await;
+        let oauth = OAuth::with_base(reqwest::Client::new(), &config(), &server.uri());
+        let token = oauth.exchange_code("good").await.unwrap();
+        assert_eq!(
+            (token.access.expose(), token.refresh.as_ref().map(Secret::expose)),
+            ("A", Some("R"))
+        );
+        assert!(!token.is_expiring());
+        assert_eq!(oauth.profile(&token).await.unwrap(), (12345, "Example".to_string()));
+        let err = oauth.exchange_code("bad").await.unwrap_err().to_string();
+        assert_eq!(err, "token request refused: bad code");
     }
 }

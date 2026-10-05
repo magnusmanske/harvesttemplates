@@ -1,5 +1,6 @@
 //! Runs, their rows, and shared queries, in ToolsDB. All SQL lives here.
 
+use crate::config::{DbConfig, DbUser};
 use crate::harvest::JobSpec;
 use crate::harvest::status::{RowStatus, RunStatus};
 use crate::wiki::Page;
@@ -87,9 +88,19 @@ pub struct ShareRecord {
     pub last_errors: Option<u64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Store {
     pool: Pool,
+    opts: Opts,
+}
+
+/// Connection options hold the password, so they stay out of `Debug`.
+impl std::fmt::Debug for Store {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Store")
+            .field("database", &self.opts.db_name())
+            .finish_non_exhaustive()
+    }
 }
 
 pub fn now() -> i64 {
@@ -97,11 +108,31 @@ pub fn now() -> i64 {
 }
 
 impl Store {
-    pub fn new(url: &str, max_connections: usize) -> Result<Self> {
-        let opts = Opts::from_url(url).context("invalid tool_db.url")?;
+    pub fn new(config: &DbConfig, user: &DbUser) -> Self {
+        let opts = OptsBuilder::default()
+            .ip_or_hostname(&config.host)
+            .tcp_port(config.port)
+            .user(Some(&user.name))
+            .pass(Some(user.password.expose()))
+            .db_name(Some(&config.database));
+        Self::with_opts(opts.into(), config.max_connections)
+    }
+
+    pub fn from_url(url: &str, max_connections: usize) -> Result<Self> {
+        Ok(Self::with_opts(
+            Opts::from_url(url).context("invalid database URL")?,
+            max_connections,
+        ))
+    }
+
+    fn with_opts(opts: Opts, max_connections: usize) -> Self {
         let constraints = PoolConstraints::new(0, max_connections.max(1)).unwrap_or_default();
-        let opts = OptsBuilder::from_opts(opts).pool_opts(PoolOpts::default().with_constraints(constraints));
-        Ok(Self { pool: Pool::new(opts) })
+        let pool_opts =
+            OptsBuilder::from_opts(opts.clone()).pool_opts(PoolOpts::default().with_constraints(constraints));
+        Self {
+            pool: Pool::new(pool_opts),
+            opts,
+        }
     }
 
     async fn conn(&self) -> Result<Conn> {
@@ -111,11 +142,28 @@ impl Store {
             .context("cannot connect to the tool database")
     }
 
+    /// Create the database if needed (Toolforge users may create `<user>__…`), then the tables.
     pub async fn migrate(&self) -> Result<()> {
+        self.create_database().await?;
         let mut conn = self.conn().await?;
         for statement in sql_statements(include_str!("schema.sql")) {
             conn.query_drop(statement).await?;
         }
+        Ok(())
+    }
+
+    async fn create_database(&self) -> Result<()> {
+        let name = self.opts.db_name().context("no database configured")?;
+        if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            anyhow::bail!("invalid database name '{name}'");
+        }
+        let opts = OptsBuilder::from_opts(self.opts.clone()).db_name(None::<String>);
+        let mut conn = Conn::new(opts)
+            .await
+            .context("cannot connect to the tool database server")?;
+        conn.query_drop(format!("CREATE DATABASE IF NOT EXISTS `{name}`"))
+            .await?;
+        conn.disconnect().await?;
         Ok(())
     }
 

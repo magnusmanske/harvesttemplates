@@ -115,7 +115,7 @@ run on the already‑fetched entity. Only distinct, type, value‑type, inverse,
 symmetric and value‑requires‑statement go to WDQS, with a per‑run cache.
 Property constraint definitions are cached (moka, 10 min).
 
-### D7 — Edits: user's own OAuth 1.0a tokens, direct `wbeditentity`
+### D7 — Edits: user's own OAuth 2 tokens, direct `wbeditentity`
 Same as the original and as `mixnmatch_rs`: one edit per statement with
 references, `maxlag=5`, exponential back‑off on `maxlag`/429, summary keeps the
 EditGroups pattern **and** says what was added (#175):
@@ -133,9 +133,10 @@ p, template, templateredirects, parameters, …, htid, run`) — many permalinks
 live on wiki pages. `share.php`, `index.html?htid=` are redirected.
 
 ### D9 — Typed config, secrets outside the repo
-`config.json` (gitignored) deserialised into a `Config` struct (improvement over
-mixnmatch's untyped `Value`). `config.json.template` is committed. Mix'n'match
-DB credentials for now; replica hosts derived from the wiki dbname.
+`config.json` (gitignored, no secrets) deserialised into a `Config` struct
+(improvement over mixnmatch's untyped `Value`). Credentials stay in the files
+Toolforge uses: `replica.my.cnf` (DB) and `oauth.ini` (OAuth 2 client).
+Replica hosts derived from the wiki dbname.
 
 ### D10 — Security baseline
 OAuth‑gated mutations; run ownership checks; CSRF via `SameSite` cookie +
@@ -175,7 +176,7 @@ src/
     runs.rs          POST /api/runs, GET /api/runs/{id}, POST …/start|stop, GET …/log.csv
     shares.rs        GET/POST/DELETE /api/shares, tags
     meta.rs          /api/site/{host} (namespaces, edition item), /api/property/{P} (datatype, constraints, units), template redirects
-  auth/              oauth1 flow, tower-sessions file store, require_user()  (ported from mixnmatch_rs)
+  auth/              OAuth 2 flow + token refresh, tower-sessions file store, require_user()
   wiki/
     site.rs          Site { host, dbname, lang, ns names/aliases, edition_qid } + validation
     replica.rs       lazy per-dbname mysql_async pool registry (host derived from dbname)
@@ -379,8 +380,7 @@ Code comments: doc comments on public items say *why*; no narrating comments.
 `axum 0.8`, `tokio`, `tower-http` (trace, cors, timeout, compression),
 `tower-sessions`, `reqwest` (gzip, cookies), `serde`/`serde_json`,
 `mysql_async`, `clap`, `tracing`/`tracing-subscriber`, `thiserror`/`anyhow`,
-`regex`, `fancy-regex`, `chrono`, `moka`, `dashmap`, `hmac`/`sha1`/`base64`
-(OAuth 1.0a), `rand`, `uuid`, `csv`, `url`.
+`regex`, `fancy-regex`, `chrono`, `moka`, `dashmap`, `rand`, `uuid`, `csv`, `url`.
 Dev: `wiremock`, `testcontainers` + `testcontainers-modules[mariadb]`,
 `tempfile`, `tokio[test-util]`.
 Evaluate before adding: `wikibase` (entity JSON types), `mediawiki` (API
@@ -390,7 +390,9 @@ continuation), `parse_wiki_text_2`.
 
 ## 9. Decisions taken
 
-- OAuth consumer: registered and approved by the maintainer.
+- Toolforge tool `harvesttemplates` exists; its database is
+  `s58203__harvesttemplates` (created on first start).
+- OAuth 2 client registered, callback `https://harvesttemplates.toolforge.org/callback`.
 - Frontend: Vue 3, no build step.
 - Repo and CI: GitHub (`magnusmanske/harvesttemplates`), GitHub Actions.
 - #113 (move images to Commons): out of scope.
@@ -398,5 +400,5 @@ continuation), `parse_wiki_text_2`.
   in memory; after a restart, interrupted runs come back as *paused* and the
   owner resumes them from their (persistent) session.
 
-Still open: final Toolforge tool name, and an `ht_share` dump from the
+Still open: an `ht_share` dump from the
 `pltools` maintainers for migrating saved queries.

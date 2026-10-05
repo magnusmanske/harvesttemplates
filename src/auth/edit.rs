@@ -1,10 +1,12 @@
 //! Writing to Wikidata as the logged-in user.
 
-use super::oauth::{OAuth, Token};
+use super::oauth::{CallError, OAuth, Token};
+use super::tokens::TokenCache;
 use crate::ids::ItemId;
-use crate::wiki::api::params;
+use crate::wiki::api::{Params, params};
 use anyhow::anyhow;
 use serde_json::{Value, json};
+use std::sync::Arc;
 use std::time::Duration;
 
 pub const WIKIDATA_API: &str = "https://www.wikidata.org/w/api.php";
@@ -12,14 +14,7 @@ pub const WIKIDATA_API: &str = "https://www.wikidata.org/w/api.php";
 const MAXLAG: &str = "5";
 
 /// API error codes after which more edits by this user cannot succeed.
-const FATAL_CODES: [&str; 6] = [
-    "blocked",
-    "autoblocked",
-    "permissiondenied",
-    "readonly",
-    "mwoauth-invalid-authorization",
-    "mwoauth-invalid-authorization-invalid-user",
-];
+const FATAL_CODES: [&str; 4] = ["blocked", "autoblocked", "permissiondenied", "readonly"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum EditError {
@@ -29,28 +24,32 @@ pub enum EditError {
     /// This edit was refused; others may still work. The text is shown to the user.
     #[error("{0}")]
     Rejected(String),
-    /// Stop the whole run (blocked user, revoked authorisation, read-only wiki).
+    /// Stop the whole run (blocked user, expired login, read-only wiki).
     #[error("{0}")]
     Fatal(String),
     #[error(transparent)]
     Failed(#[from] anyhow::Error),
 }
 
-/// Edits Wikidata as one user, keeping the CSRF token between edits.
+/// Edits Wikidata as one user, refreshing their OAuth token as needed and
+/// keeping the CSRF token between edits.
 #[derive(Debug)]
 pub struct Editor {
     oauth: OAuth,
     api_url: String,
-    user: Token,
+    user: u64,
+    tokens: Arc<TokenCache>,
     csrf: Option<String>,
 }
 
 impl Editor {
-    pub const fn new(oauth: OAuth, api_url: String, user: Token) -> Self {
+    /// `user` must have a token in `tokens`.
+    pub const fn new(oauth: OAuth, api_url: String, user: u64, tokens: Arc<TokenCache>) -> Self {
         Self {
             oauth,
             api_url,
             user,
+            tokens,
             csrf: None,
         }
     }
@@ -70,7 +69,7 @@ impl Editor {
                 ("bot", "1"),
                 ("token", &csrf),
             ]);
-            let response = self.oauth.post(&self.api_url, &p, &self.user).await?;
+            let response = self.call(&p).await?;
             match response["error"]["code"].as_str() {
                 Some("badtoken") => self.csrf = None,
                 _ => return outcome(&response),
@@ -84,14 +83,50 @@ impl Editor {
             return Ok(token.clone());
         }
         let p = params(&[("action", "query"), ("meta", "tokens"), ("type", "csrf")]);
-        let response = self.oauth.post(&self.api_url, &p, &self.user).await?;
+        let response = self.call(&p).await?;
         let token = response["query"]["tokens"]["csrftoken"]
             .as_str()
             .filter(|t| *t != "+\\")
-            .ok_or_else(|| EditError::Fatal("not logged in to Wikidata; please log in again".into()))?;
+            .ok_or_else(|| logged_out("Wikidata does not recognise the login"))?;
         self.csrf = Some(token.to_string());
         Ok(token.to_string())
     }
+
+    /// One API call; refreshes the OAuth token first if it is about to expire,
+    /// and once more if the API rejects it.
+    async fn call(&self, params: &Params) -> Result<Value, EditError> {
+        let mut token = self.tokens.get(self.user).ok_or_else(|| logged_out("no login"))?;
+        if token.is_expiring() {
+            token = self.refresh(&token).await?;
+        }
+        match self.oauth.post(&self.api_url, params, &token).await {
+            Err(CallError::Unauthorized) => {
+                let token = self.refresh(&token).await?;
+                self.oauth
+                    .post(&self.api_url, params, &token)
+                    .await
+                    .map_err(|e| match e {
+                        CallError::Unauthorized => logged_out("the login was rejected"),
+                        CallError::Other(e) => EditError::Failed(e),
+                    })
+            }
+            result => result.map_err(|e| EditError::Failed(anyhow!(e))),
+        }
+    }
+
+    async fn refresh(&self, token: &Token) -> Result<Token, EditError> {
+        let fresh = self
+            .oauth
+            .refresh(token)
+            .await
+            .map_err(|e| logged_out(&format!("{e:#}")))?;
+        self.tokens.replace(self.user, fresh.clone());
+        Ok(fresh)
+    }
+}
+
+fn logged_out(reason: &str) -> EditError {
+    EditError::Fatal(format!("{reason}; please log in again and resume the run"))
 }
 
 fn outcome(response: &Value) -> Result<(), EditError> {
@@ -113,64 +148,126 @@ fn outcome(response: &Value) -> Result<(), EditError> {
     })
 }
 
-/// The Wikidata account behind an access token.
-pub async fn identify(oauth: &OAuth, api_url: &str, token: &Token) -> anyhow::Result<(u64, String)> {
-    let p = params(&[("action", "query"), ("meta", "userinfo")]);
-    let info = oauth.post(api_url, &p, token).await?["query"]["userinfo"].clone();
-    match (info["id"].as_u64(), info["name"].as_str(), info.get("anon")) {
-        (Some(id), Some(name), None) if id > 0 => Ok((id, name.to_string())),
-        _ => Err(anyhow!("OAuth login did not identify a user")),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{OauthConfig, Secret};
-    use wiremock::matchers::{body_string_contains, method};
+    use crate::storage::now;
+    use wiremock::matchers::{body_string_contains, header, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    fn editor(url: String) -> Editor {
+    fn token(access: &str, expires_in: i64) -> Token {
+        Token {
+            access: Secret::from(access),
+            refresh: Some(Secret::from("R")),
+            expires_at: now() + expires_in,
+        }
+    }
+
+    fn editor(url: &str, token: Token) -> Editor {
         let config = OauthConfig {
-            consumer_key: "ck".into(),
-            consumer_secret: Secret::from("cs"),
-            callback_url: "http://localhost/cb".into(),
+            client_id: "cid".into(),
+            client_secret: Secret::from("cs"),
+            callback_url: "x".into(),
         };
-        let oauth = OAuth::new(reqwest::Client::new(), &config);
+        let tokens = Arc::new(TokenCache::default());
+        tokens.replace(1, token);
         Editor::new(
-            oauth,
-            url,
-            Token {
-                key: "k".into(),
-                secret: Secret::from("s"),
-            },
+            OAuth::with_base(reqwest::Client::new(), &config, url),
+            format!("{url}/api"),
+            1,
+            tokens,
         )
     }
 
-    async fn respond(server: &MockServer, body_contains: &str, response: Value) {
-        Mock::given(method("POST"))
-            .and(body_string_contains(body_contains))
-            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+    async fn respond(server: &MockServer, matcher: impl wiremock::Match + 'static, status: u16, body: Value) {
+        Mock::given(matcher)
+            .respond_with(ResponseTemplate::new(status).set_body_json(body))
             .mount(server)
             .await;
     }
 
     #[tokio::test]
-    async fn edit_success_and_signed_header() {
+    async fn edits_with_bearer_token() {
         let server = MockServer::start().await;
         respond(
             &server,
-            "meta=tokens",
+            body_string_contains("meta=tokens"),
+            200,
             json!({"query": {"tokens": {"csrftoken": "abc+\\"}}}),
         )
         .await;
-        respond(&server, "action=wbeditentity", json!({"success": 1})).await;
-        let mut ed = editor(server.uri());
+        respond(
+            &server,
+            body_string_contains("action=wbeditentity"),
+            200,
+            json!({"success": 1}),
+        )
+        .await;
+        let mut ed = editor(&server.uri(), token("A", 3600));
         ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
         let requests = server.received_requests().await.unwrap();
-        let auth = requests[1].headers.get("authorization").unwrap().to_str().unwrap();
-        assert!(auth.starts_with("OAuth ") && auth.contains("oauth_signature="));
+        assert_eq!(requests[1].headers.get("authorization").unwrap(), "Bearer A");
         assert!(String::from_utf8_lossy(&requests[1].body).contains("maxlag=5"));
+    }
+
+    #[tokio::test]
+    async fn refreshes_expiring_and_rejected_tokens() {
+        let server = MockServer::start().await;
+        respond(
+            &server,
+            path("/access_token"),
+            200,
+            json!({"access_token": "B", "refresh_token": "R2", "expires_in": 14400}),
+        )
+        .await;
+        Mock::given(header("authorization", "Bearer A"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        respond(
+            &server,
+            body_string_contains("meta=tokens"),
+            200,
+            json!({"query": {"tokens": {"csrftoken": "t+\\"}}}),
+        )
+        .await;
+        respond(
+            &server,
+            body_string_contains("action=wbeditentity"),
+            200,
+            json!({"success": 1}),
+        )
+        .await;
+
+        let mut ed = editor(&server.uri(), token("A", 3600));
+        ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
+        assert_eq!(
+            ed.tokens.get(1).unwrap().access.expose(),
+            "B",
+            "rejected token was refreshed"
+        );
+
+        let mut ed = editor(&server.uri(), token("A", 10));
+        ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
+        let refreshed = ed.tokens.get(1).unwrap();
+        assert_eq!(
+            refreshed.refresh.unwrap().expose(),
+            "R2",
+            "expiring token was refreshed before use"
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_refresh_stops_the_run() {
+        let server = MockServer::start().await;
+        respond(&server, path("/access_token"), 400, json!({"error": "invalid_grant"})).await;
+        respond(&server, path("/api"), 401, json!({})).await;
+        let err = editor(&server.uri(), token("A", 3600))
+            .add_statements(ItemId(1), &[], "s")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, EditError::Fatal(m) if m.contains("log in again")));
     }
 
     #[test]
@@ -179,21 +276,5 @@ mod tests {
         assert!(matches!(err("maxlag"), EditError::Busy(d) if d == Duration::from_secs(12)));
         assert!(matches!(err("blocked"), EditError::Fatal(_)));
         assert!(matches!(err("modification-failed"), EditError::Rejected(m) if m == "msg"));
-    }
-
-    #[tokio::test]
-    async fn anonymous_csrf_token_is_fatal() {
-        let server = MockServer::start().await;
-        respond(
-            &server,
-            "meta=tokens",
-            json!({"query": {"tokens": {"csrftoken": "+\\"}}}),
-        )
-        .await;
-        let err = editor(server.uri())
-            .add_statements(ItemId(1), &[], "s")
-            .await
-            .unwrap_err();
-        assert!(matches!(err, EditError::Fatal(_)));
     }
 }

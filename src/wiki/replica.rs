@@ -1,6 +1,6 @@
 use super::pages::{CategoryStep, Limits, Page, PageSource};
 use super::site::{NS_CATEGORY, Site};
-use crate::config::ReplicaConfig;
+use crate::config::{DbUser, ReplicaConfig};
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use dashmap::DashMap;
@@ -12,16 +12,25 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const IN_LIST_CHUNK: usize = 500;
 
 /// One lazily created connection pool per wiki replica.
-#[derive(Debug)]
 pub struct Replicas {
     config: ReplicaConfig,
+    user: DbUser,
     pools: DashMap<String, Pool>,
 }
 
+impl std::fmt::Debug for Replicas {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Replicas")
+            .field("config", &self.config)
+            .finish_non_exhaustive()
+    }
+}
+
 impl Replicas {
-    pub fn new(config: ReplicaConfig) -> Self {
+    pub fn new(config: ReplicaConfig, user: DbUser) -> Self {
         Self {
             config,
+            user,
             pools: DashMap::new(),
         }
     }
@@ -48,8 +57,8 @@ impl Replicas {
         let opts = OptsBuilder::default()
             .ip_or_hostname(host)
             .tcp_port(port)
-            .user(Some(&c.user))
-            .pass(Some(c.password.expose()))
+            .user(Some(&self.user.name))
+            .pass(Some(self.user.password.expose()))
             .db_name(Some(format!("{dbname}_p")))
             .setup(vec!["SET SESSION max_statement_time = 300"])
             .pool_opts(
@@ -141,7 +150,7 @@ mod tests {
         let config = Config::load("config.json".as_ref()).unwrap();
         let http = crate::app_state::http_client(&config.user_agent).unwrap();
         let api = ApiSource { api: MwApi::new(http) };
-        let replicas = Replicas::new(config.replicas);
+        let replicas = Replicas::new(config.replicas, config.db_user);
         let site = Site::load(&api.api, "en.wikipedia.org").await.unwrap();
 
         let template = site.db_key(10, "Template:Coord missing");

@@ -1,4 +1,4 @@
-use crate::auth::{FileSessionStore, OAuth};
+use crate::auth::{FileSessionStore, OAuth, TokenCache};
 use crate::config::Config;
 use crate::harvest::ActiveRuns;
 use crate::storage::Store;
@@ -56,6 +56,7 @@ pub struct AppState {
     pub sessions: FileSessionStore,
     pub store: Store,
     pub runs: Arc<ActiveRuns>,
+    pub tokens: Arc<TokenCache>,
 }
 
 impl AppState {
@@ -66,16 +67,17 @@ impl AppState {
             api: clients.mw.clone(),
         };
         let pages = WithFallback {
-            primary: Replicas::new(config.replicas.clone()),
+            primary: Replicas::new(config.replicas.clone(), config.db_user.clone()),
             fallback,
         };
         let session_dir = &config.server.session_dir;
         let sessions = FileSessionStore::new(session_dir.clone())
             .with_context(|| format!("cannot create session directory {}", session_dir.display()))?;
-        let store = Store::new(config.tool_db.url.expose(), config.tool_db.max_connections)?;
+        let store = Store::new(&config.tool_db, &config.db_user);
         Ok(Self {
             store,
             runs: Arc::default(),
+            tokens: Arc::default(),
             clients,
             wikidata_api_url: crate::auth::edit::WIKIDATA_API.to_string(),
             pages: Arc::new(pages),

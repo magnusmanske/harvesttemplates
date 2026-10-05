@@ -33,7 +33,8 @@ the long-standing problems:
 ## Quick start
 
 ```sh
-cp config.json.template config.json   # fill in; never commit this file
+cp config.json.template config.json   # hosts and paths; no secrets
+# put replica.my.cnf and oauth.ini next to it; never commit any of the three
 cargo run -- --config config.json     # http://localhost:8000
 cargo test                            # DB tests need Docker
 ```

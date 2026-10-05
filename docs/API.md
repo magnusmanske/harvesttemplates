@@ -9,8 +9,8 @@ Mutating requests from other origins are refused.
 
 | Request | |
 |---|---|
-| `GET /api/auth/login?return_to=/path` | Redirects to MediaWiki OAuth, then back to `return_to` (local paths only). |
-| `GET /api/auth/callback` | OAuth callback. |
+| `GET /api/auth/login?return_to=/path` | Redirects to MediaWiki OAuth 2, then back to `return_to` (local paths only). |
+| `GET /callback` | OAuth callback; the path is taken from the registered callback URL. |
 | `POST /api/auth/logout` | 204. |
 | `GET /api/auth/me` | `{"user": "Name"}` or `{"user": null}`. |
 

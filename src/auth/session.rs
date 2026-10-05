@@ -8,7 +8,7 @@ const KEY: &str = "login";
 /// A logged-in Wikidata user. Only ever built from a completed OAuth handshake.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    /// Wikidata user id.
+    /// MediaWiki central user id: the same on every wiki, survives renames.
     pub id: u64,
     pub name: String,
     pub token: Token,
@@ -20,7 +20,7 @@ pub enum Login {
     Anonymous,
     /// Waiting for the user to come back from `Special:OAuth/authorize`.
     Pending {
-        request: Token,
+        state: String,
         return_to: String,
     },
     LoggedIn(User),

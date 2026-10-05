@@ -25,15 +25,23 @@ fn spec() -> JobSpec {
 
 fn editor(url: &str) -> Editor {
     let config = OauthConfig {
-        consumer_key: "ck".into(),
-        consumer_secret: Secret::from("cs"),
+        client_id: "c".into(),
+        client_secret: Secret::from("s"),
         callback_url: "x".into(),
     };
     let token = Token {
-        key: "k".into(),
-        secret: Secret::from("s"),
+        access: Secret::from("A"),
+        refresh: None,
+        expires_at: crate::storage::now() + 3600,
     };
-    Editor::new(OAuth::new(reqwest::Client::new(), &config), url.to_string(), token)
+    let tokens = std::sync::Arc::new(crate::auth::TokenCache::default());
+    tokens.replace(OWNER, token);
+    Editor::new(
+        OAuth::with_base(reqwest::Client::new(), &config, url),
+        url.to_string(),
+        OWNER,
+        tokens,
+    )
 }
 
 #[tokio::test]

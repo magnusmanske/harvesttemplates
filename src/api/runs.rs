@@ -146,11 +146,14 @@ async fn start_worker(app: SharedState, session: &Session, id: u64, edit: bool) 
         .claim(id, user.id, app.config.harvest.max_active_runs_per_user)?;
     let job = Job::prepare(&app.clients, run.spec.clone()).await?;
     let mode = if edit {
-        Mode::Edit(Box::new(Editor::new(
+        app.tokens.freshest(user.id, user.token);
+        let editor = Editor::new(
             app.oauth.clone(),
             app.wikidata_api_url.clone(),
-            user.token,
-        )))
+            user.id,
+            app.tokens.clone(),
+        );
+        Mode::Edit(Box::new(editor))
     } else {
         Mode::Preview
     };

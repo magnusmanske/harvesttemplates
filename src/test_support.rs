@@ -21,7 +21,7 @@ pub async fn test_store() -> (ContainerAsync<Mariadb>, Store) {
         .await
         .expect("Docker must be running for DB tests");
     let port = container.get_host_port_ipv4(3306).await.unwrap();
-    let store = Store::new(&format!("mysql://root@127.0.0.1:{port}/test"), 4).unwrap();
+    let store = Store::from_url(&format!("mysql://root@127.0.0.1:{port}/test"), 4).unwrap();
     store.migrate().await.unwrap();
     (container, store)
 }
@@ -35,10 +35,11 @@ pub fn test_app(store: Store, mock_url: &str, session_dir: &std::path::Path) -> 
         pages: Arc::new(ApiSource {
             api: clients.mw.clone(),
         }),
-        oauth: OAuth::new(reqwest::Client::new(), &config.oauth),
+        oauth: OAuth::with_base(reqwest::Client::new(), &config.oauth, mock_url),
         sessions: FileSessionStore::new(session_dir.to_path_buf()).unwrap(),
         wikidata_api_url: mock_url.to_string(),
         runs: Arc::new(ActiveRuns::default()),
+        tokens: Arc::default(),
         clients,
         store,
         config,

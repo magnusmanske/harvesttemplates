@@ -10,14 +10,12 @@ repository = "https://github.com/magnusmanske/harvesttemplates"
 anyhow = "1"
 async-trait = "0.1"
 axum = "0.8"
-base64 = "0.23"
 chrono = "0.4"
 csv = "1"
 clap = { version = "4", features = ["derive", "env"] }
 dashmap = "6"
 fancy-regex = "0.19"
 futures = "0.3"
-hmac = "0.13"
 moka = { version = "0.12", features = ["future"] }
 mysql_async = "0.37"
 rand = "0.10"
@@ -25,7 +23,6 @@ regex = "1"
 reqwest = { version = "0.13", features = ["json", "gzip", "form", "query"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha1 = "0.11"
 thiserror = "2"
 time = "0.3"
 tokio = { version = "1", features = ["full"] }

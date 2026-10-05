@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 /// A string that never shows up in `Debug` output or logs.
 /// Serialisable because OAuth tokens live in (owner-only) session files.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Secret(String);
 
@@ -34,13 +34,39 @@ impl From<&str> for Secret {
 pub struct Config {
     #[serde(default)]
     pub server: ServerConfig,
+    /// MySQL `user`/`password` in `my.cnf` format, as Toolforge provides them.
+    /// Relative paths are relative to the config file.
+    #[serde(default = "default_db_credentials")]
+    pub db_credentials: PathBuf,
     pub tool_db: DbConfig,
     pub replicas: ReplicaConfig,
-    pub oauth: OauthConfig,
+    /// OAuth 2 client: `application_key`, `application_secret`, `callback_url`.
+    #[serde(default = "default_oauth_file")]
+    pub oauth_file: PathBuf,
     #[serde(default)]
     pub harvest: HarvestConfig,
     /// Sent with every outbound request, per the Wikimedia User-Agent policy.
     pub user_agent: String,
+    /// Read from `db_credentials`.
+    #[serde(skip)]
+    pub db_user: DbUser,
+    /// Read from `oauth_file`.
+    #[serde(skip)]
+    pub oauth: OauthConfig,
+}
+
+fn default_db_credentials() -> PathBuf {
+    "replica.my.cnf".into()
+}
+
+fn default_oauth_file() -> PathBuf {
+    "oauth.ini".into()
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DbUser {
+    pub name: String,
+    pub password: Secret,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -66,8 +92,11 @@ impl Default for ServerConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct DbConfig {
-    /// `mysql://user:password@host:port/database`
-    pub url: Secret,
+    pub host: String,
+    #[serde(default = "default_mysql_port")]
+    pub port: u16,
+    /// `{user}` is replaced by the database user, e.g. `{user}__harvesttemplates`.
+    pub database: String,
     #[serde(default = "default_max_connections")]
     pub max_connections: usize,
 }
@@ -84,8 +113,6 @@ pub struct ReplicaConfig {
     pub host_pattern: String,
     #[serde(default = "default_mysql_port")]
     pub port: u16,
-    pub user: String,
-    pub password: Secret,
     #[serde(default)]
     pub overrides: HashMap<String, String>,
     #[serde(default = "default_max_connections")]
@@ -96,11 +123,11 @@ const fn default_mysql_port() -> u16 {
     3306
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct OauthConfig {
-    pub consumer_key: String,
-    pub consumer_secret: Secret,
-    /// Absolute URL of `/api/auth/callback` as registered with the consumer.
+    pub client_id: String,
+    pub client_secret: Secret,
+    /// As registered with the OAuth 2 client; its path is served by the login callback.
     pub callback_url: String,
 }
 
@@ -128,11 +155,48 @@ impl Default for HarvestConfig {
 }
 
 impl Config {
+    /// Load the config and the credential files it points to.
     pub fn load(path: &Path) -> Result<Self> {
         let text =
             std::fs::read_to_string(path).with_context(|| format!("cannot read config file {}", path.display()))?;
-        serde_json::from_str(&text).with_context(|| format!("invalid config file {}", path.display()))
+        let mut config: Self =
+            serde_json::from_str(&text).with_context(|| format!("invalid config file {}", path.display()))?;
+        let dir = path.parent().unwrap_or(Path::new("."));
+        let db = read_key_values(&dir.join(&config.db_credentials))?;
+        config.db_user = DbUser {
+            name: required(&db, "user")?,
+            password: Secret(required(&db, "password")?),
+        };
+        config.tool_db.database = config.tool_db.database.replace("{user}", &config.db_user.name);
+        let oauth = read_key_values(&dir.join(&config.oauth_file))?;
+        config.oauth = OauthConfig {
+            client_id: required(&oauth, "application_key")?,
+            client_secret: Secret(required(&oauth, "application_secret")?),
+            callback_url: required(&oauth, "callback_url")?,
+        };
+        Ok(config)
     }
+}
+
+/// `key = value` lines of an ini/cnf file. Sections and comments are ignored,
+/// surrounding quotes removed.
+fn read_key_values(path: &Path) -> Result<HashMap<String, String>> {
+    let text = std::fs::read_to_string(path).with_context(|| format!("cannot read {}", path.display()))?;
+    Ok(text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.starts_with(['#', ';', '[']))
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, v)| (k.trim().to_string(), v.trim().trim_matches(['"', '\'']).to_string()))
+        .collect())
+}
+
+fn required(values: &HashMap<String, String>, key: &str) -> Result<String> {
+    values
+        .get(key)
+        .filter(|v| !v.is_empty())
+        .cloned()
+        .with_context(|| format!("credentials file lacks '{key}'"))
 }
 
 #[cfg(test)]
@@ -140,19 +204,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn template_parses() {
-        let text = include_str!("../config.json.template");
-        let cfg: Config = serde_json::from_str(text).unwrap();
-        assert_eq!(cfg.replicas.port, 3306);
-        assert!(cfg.server.cookie_secure);
+    fn loads_config_and_credential_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, include_str!("../config.json.template")).unwrap();
+        std::fs::write(
+            dir.path().join("replica.my.cnf"),
+            "[client]\nuser = s1234\npassword = 'pw=1'\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("oauth.ini"),
+            "; OAuth 2\napplication_key=abc\napplication_secret=\"def\"\ncallback_url=\"https://x.toolforge.org/callback\"\n",
+        )
+        .unwrap();
+        let cfg = Config::load(&path).unwrap();
+        assert_eq!(cfg.db_user.name, "s1234");
+        assert_eq!(cfg.db_user.password.expose(), "pw=1");
+        assert_eq!(cfg.tool_db.database, "s1234__harvesttemplates");
+        assert_eq!(
+            (cfg.oauth.client_id.as_str(), cfg.oauth.client_secret.expose()),
+            ("abc", "def")
+        );
+        assert_eq!(cfg.oauth.callback_url, "https://x.toolforge.org/callback");
+        let dbg = format!("{cfg:?}");
+        assert!(!dbg.contains("pw=1") && !dbg.contains("def"), "{dbg}");
     }
 
     #[test]
-    fn secrets_are_redacted_in_debug() {
-        let text = include_str!("../config.json.template");
-        let cfg: Config = serde_json::from_str(text).unwrap();
-        let dbg = format!("{cfg:?}");
-        assert!(!dbg.contains("PASSWORD"), "{dbg}");
-        assert!(!dbg.contains("CONSUMER_SECRET"), "{dbg}");
+    fn missing_credentials_are_explained() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, include_str!("../config.json.template")).unwrap();
+        let err = Config::load(&path).unwrap_err().to_string();
+        assert!(err.contains("replica.my.cnf"), "{err}");
     }
 }

@@ -3,3 +3,5 @@ config.json
 sessions/
 .DS_Store
 .claude/
+replica.my.cnf
+oauth*.ini

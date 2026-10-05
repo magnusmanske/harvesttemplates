@@ -1,5 +1,4 @@
 use super::{ApiError, SharedState};
-use crate::auth::edit::identify;
 use crate::auth::session::{self, Login, User, safe_return_path};
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
@@ -13,9 +12,13 @@ use tower_sessions::Session;
 pub fn routes() -> Router<SharedState> {
     Router::new()
         .route("/login", get(login))
-        .route("/callback", get(callback))
         .route("/logout", post(logout))
         .route("/me", get(me))
+}
+
+/// The path of the registered OAuth callback URL, where [`callback`] is mounted.
+pub fn callback_path(callback_url: &str) -> String {
+    reqwest::Url::parse(callback_url).map_or_else(|_| "/callback".to_string(), |u| u.path().to_string())
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,37 +27,43 @@ struct LoginQuery {
 }
 
 async fn login(
-    State(app): State<SharedState>,
     session: Session,
+    State(app): State<SharedState>,
     Query(q): Query<LoginQuery>,
 ) -> Result<Redirect, ApiError> {
-    let request = app.oauth.request_token().await?;
-    let url = app.oauth.authorize_url(&request);
+    let state: String = (0..16).map(|_| format!("{:02x}", rand::random::<u8>())).collect();
+    let url = app.oauth.authorize_url(&state);
     let return_to = safe_return_path(q.return_to.as_deref());
-    session::store(&session, &Login::Pending { request, return_to }).await?;
+    session::store(&session, &Login::Pending { state, return_to }).await?;
     Ok(Redirect::to(&url))
 }
 
 #[derive(Debug, Deserialize)]
-struct CallbackQuery {
-    oauth_verifier: String,
-    oauth_token: String,
+pub struct CallbackQuery {
+    code: Option<String>,
+    state: Option<String>,
+    error: Option<String>,
 }
 
-async fn callback(
+pub async fn callback(
     State(app): State<SharedState>,
     session: Session,
     Query(q): Query<CallbackQuery>,
 ) -> Result<Redirect, ApiError> {
-    let Login::Pending { request, return_to } = session::load(&session).await else {
+    let Login::Pending { state, return_to } = session::load(&session).await else {
         return Err(ApiError::bad_request("no login in progress; please start again"));
     };
-    if request.key != q.oauth_token {
-        return Err(ApiError::bad_request("login token mismatch; please start again"));
+    if let Some(error) = q.error {
+        return Err(ApiError::bad_request(format!("login not completed: {error}")));
     }
-    let token = app.oauth.access_token(&request, &q.oauth_verifier).await?;
-    let (id, name) = identify(&app.oauth, &app.wikidata_api_url, &token).await?;
+    if q.state.as_deref() != Some(state.as_str()) {
+        return Err(ApiError::bad_request("login state mismatch; please start again"));
+    }
+    let code = q.code.ok_or_else(|| ApiError::bad_request("no authorization code"))?;
+    let token = app.oauth.exchange_code(&code).await?;
+    let (id, name) = app.oauth.profile(&token).await?;
     tracing::info!("login: {name}");
+    let token = app.tokens.freshest(id, token);
     session::store(&session, &Login::LoggedIn(User { id, name, token })).await?;
     Ok(Redirect::to(&return_to))
 }
@@ -66,4 +75,22 @@ async fn logout(session: Session) -> Result<StatusCode, ApiError> {
 
 async fn me(session: Session) -> Json<Value> {
     Json(json!({ "user": session::current_user(&session).await.map(|u| u.name) }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn callback_paths() {
+        assert_eq!(
+            callback_path("https://harvesttemplates.toolforge.org/callback"),
+            "/callback"
+        );
+        assert_eq!(
+            callback_path("http://localhost:8000/api/auth/callback"),
+            "/api/auth/callback"
+        );
+        assert_eq!(callback_path("nonsense"), "/callback");
+    }
 }
