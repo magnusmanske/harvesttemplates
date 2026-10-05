@@ -70,8 +70,9 @@ export default {
     async function share() {
       const title = prompt('Title for the shared query, e.g. "IMDb IDs from enwiki films"');
       if (!title) return;
+      const tags = (prompt('Tags, comma-separated (optional), e.g. "enwiki, films"') ?? '').split(',');
       try {
-        await api('/shares', { method: 'POST', body: { title, spec: run.value.spec } });
+        await api('/shares', { method: 'POST', body: { title, spec: run.value.spec, tags } });
         location.hash = '#/shares';
       } catch (e) {
         error.value = e.message;

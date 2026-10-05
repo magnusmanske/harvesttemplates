@@ -9,6 +9,7 @@ use mysql_async::prelude::{FromValue, Queryable};
 use mysql_async::{Conn, Opts, OptsBuilder, Pool, PoolConstraints, PoolOpts, Row, Value};
 use serde::Serialize;
 use serde_json::Value as Json;
+use std::collections::HashMap;
 
 const INSERT_CHUNK: usize = 500;
 
@@ -86,6 +87,7 @@ pub struct ShareRecord {
     pub last_completed: Option<i64>,
     pub last_done: Option<u64>,
     pub last_errors: Option<u64>,
+    pub tags: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -285,22 +287,46 @@ impl Store {
     }
 
     pub async fn shares(&self) -> Result<Vec<ShareRecord>> {
-        let sql = format!("SELECT {SHARE_COLUMNS} FROM share ORDER BY id DESC");
-        let rows: Vec<Row> = self.conn().await?.query(sql).await?;
-        rows.into_iter().map(share_from_row).collect()
+        let mut conn = self.conn().await?;
+        let rows: Vec<Row> = conn.query(format!("SELECT {SHARE_COLUMNS} FROM share ORDER BY id DESC")).await?;
+        let mut tags: HashMap<u64, Vec<String>> = HashMap::new();
+        for (share, tag) in conn.query::<(u64, String), _>("SELECT share_id, tag FROM share_tag ORDER BY tag").await? {
+            tags.entry(share).or_default().push(tag);
+        }
+        let mut shares: Vec<ShareRecord> = rows.into_iter().map(share_from_row).collect::<Result<_>>()?;
+        for share in &mut shares {
+            share.tags = tags.remove(&share.id).unwrap_or_default();
+        }
+        Ok(shares)
     }
 
     pub async fn share(&self, id: u64) -> Result<Option<ShareRecord>> {
-        let sql = format!("SELECT {SHARE_COLUMNS} FROM share WHERE id = ?");
-        let row: Option<Row> = self.conn().await?.exec_first(sql, (id,)).await?;
-        row.map(share_from_row).transpose()
+        let mut conn = self.conn().await?;
+        let row: Option<Row> =
+            conn.exec_first(format!("SELECT {SHARE_COLUMNS} FROM share WHERE id = ?"), (id,)).await?;
+        let Some(mut share) = row.map(share_from_row).transpose()? else { return Ok(None) };
+        share.tags = conn.exec("SELECT tag FROM share_tag WHERE share_id = ? ORDER BY tag", (id,)).await?;
+        Ok(Some(share))
+    }
+
+    /// Replace a share's tags (#174). Ownership is the caller's to check.
+    pub async fn set_tags(&self, id: u64, tags: &[String]) -> Result<()> {
+        let mut tx = self.pool.start_transaction(mysql_async::TxOpts::default()).await?;
+        tx.exec_drop("DELETE FROM share_tag WHERE share_id = ?", (id,)).await?;
+        tx.exec_batch("INSERT INTO share_tag (share_id, tag) VALUES (?, ?)", tags.iter().map(|t| (id, t))).await?;
+        tx.commit().await?;
+        Ok(())
     }
 
     /// Only the owner can delete. Returns whether a share was deleted.
     pub async fn delete_share(&self, id: u64, user_id: u64) -> Result<bool> {
         let mut conn = self.conn().await?;
         conn.exec_drop("DELETE FROM share WHERE id = ? AND user_id = ?", (id, user_id)).await?;
-        Ok(conn.affected_rows() > 0)
+        let deleted = conn.affected_rows() > 0;
+        if deleted {
+            conn.exec_drop("DELETE FROM share_tag WHERE share_id = ?", (id,)).await?;
+        }
+        Ok(deleted)
     }
 
     /// Show how the last complete run of a shared query went (#137, #141).
@@ -377,6 +403,7 @@ fn share_from_row(mut row: Row) -> Result<ShareRecord> {
         last_completed: take(&mut row, "last_completed")?,
         last_done: take(&mut row, "last_done")?,
         last_errors: take(&mut row, "last_errors")?,
+        tags: vec![],
     })
 }
 

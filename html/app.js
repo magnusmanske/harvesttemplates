@@ -2,7 +2,7 @@
 //   #/          the harvest form (permalink parameters in the query string)
 //   #/run/ID    one run
 //   #/runs      my runs
-//   #/shares    shared queries
+//   #/shares    shared queries; #/shares/TAG only those with that tag
 import { createApp, ref, onMounted } from 'vue';
 import HarvestForm from './js/harvest-form.js';
 import RunView from './js/run-view.js';
@@ -11,8 +11,8 @@ import SharesList from './js/shares-list.js';
 import { user, refreshUser, login, logout } from './js/session.js';
 
 function parseHash() {
-  const [, view = '', id = ''] = location.hash.split('/');
-  return { view, id: Number(id) };
+  const [, view = '', param = ''] = location.hash.split('/');
+  return { view, param: decodeURIComponent(param) };
 }
 
 const App = {
@@ -43,9 +43,9 @@ const App = {
 </header>
 <main class="container-fluid py-3">
   <template v-if="ready">
-    <run-view v-if="route.view === 'run'" :id="route.id" />
+    <run-view v-if="route.view === 'run'" :id="Number(route.param)" />
     <runs-list v-else-if="route.view === 'runs'" />
-    <shares-list v-else-if="route.view === 'shares'" />
+    <shares-list v-else-if="route.view === 'shares'" :tag="route.param" />
     <harvest-form v-else />
   </template>
 </main>`,

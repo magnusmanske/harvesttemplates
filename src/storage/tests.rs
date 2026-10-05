@@ -59,6 +59,10 @@ async fn runs_rows_and_shares() {
     assert!(store.runs_of(8, 10).await.unwrap().is_empty());
 
     let share = store.create_share(&owner(), "IMDb from enwiki", &spec).await.unwrap();
+    store.set_tags(share, &["films".into(), "imdb".into()]).await.unwrap();
+    store.set_tags(share, &["imdb".into(), "enwiki".into()]).await.unwrap();
+    assert_eq!(store.share(share).await.unwrap().unwrap().tags, ["enwiki", "imdb"]);
+    assert_eq!(store.shares().await.unwrap()[0].tags, ["enwiki", "imdb"]);
     store.record_share_run(share, id, &counts).await.unwrap();
     let s = store.share(share).await.unwrap().unwrap();
     assert_eq!((s.title.as_str(), s.last_done, s.spec), ("IMDb from enwiki", Some(1), spec));

@@ -11,18 +11,20 @@ const COLUMNS = [
   { key: 'template', label: 'Template' },
   { key: 'parameters', label: 'Parameter' },
   { key: 'user_name', label: 'Shared by' },
+  { key: 'tagText', label: 'Tags' },
   { key: 'last_completed', label: 'Last complete run' },
 ];
 
 /** Flatten a share into the sortable/searchable columns. */
 function row(share) {
   const s = share.spec;
-  const parameters = s.use_page_title ? '(page title)' : s.date_parameters ? Object.values(s.date_parameters).filter(Boolean).join(' / ') : s.parameters.join(', ');
-  return { ...share, wiki: `${s.siteid}.${s.project}`, property: s.property, template: s.template, parameters };
+  const parameters = s.use_page_title ? '(page title)' : s.value_pattern ? s.value_pattern : s.date_parameters ? Object.values(s.date_parameters).filter(Boolean).join(' / ') : s.parameters.join(', ');
+  return { ...share, wiki: `${s.siteid}.${s.project}`, property: s.property, template: s.template, parameters, tagText: share.tags.join(' ') };
 }
 
 export default {
-  setup() {
+  props: { tag: { type: String, default: '' } },
+  setup(props) {
     const shares = ref(null);
     const error = ref('');
     const search = ref('');
@@ -32,6 +34,7 @@ export default {
       const needle = search.value.trim().toLowerCase();
       const { key, descending } = sort.value;
       return (shares.value ?? [])
+        .filter((s) => !props.tag || s.tags.includes(props.tag))
         .filter((s) => !needle || COLUMNS.some((c) => String(s[c.key] ?? '').toLowerCase().includes(needle)))
         .sort((a, b) => (descending ? -1 : 1) * String(a[key] ?? '').localeCompare(String(b[key] ?? ''), undefined, { numeric: true }));
     });
@@ -54,14 +57,26 @@ export default {
       }
     }
 
+    async function editTags(share) {
+      const text = prompt('Tags, comma-separated', share.tags.join(', '));
+      if (text === null) return;
+      try {
+        await api(`/shares/${share.id}/tags`, { method: 'PUT', body: { tags: text.split(',') } });
+        await load();
+      } catch (e) {
+        error.value = e.message;
+      }
+    }
+
     const sortBy = (key) => { sort.value = { key, descending: sort.value.key === key ? !sort.value.descending : false }; };
     onMounted(load);
-    return { shares, visible, error, search, sort, sortBy, remove, user, COLUMNS, entityUrl, formatTime };
+    return { shares, visible, error, search, sort, sortBy, remove, editTags, user, COLUMNS, entityUrl, formatTime, tagUrl: (t) => `#/shares/${encodeURIComponent(t)}` };
   },
   template: `
 <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
   <h1 class="h4 mb-0">Shared queries</h1>
   <input v-model="search" class="form-control ht-search" placeholder="Search" aria-label="search">
+  <span v-if="tag" class="badge text-bg-primary fs-6">{{ tag }} <a href="#/shares" class="text-white ms-1" title="all tags">×</a></span>
 </div>
 <div v-if="error" class="alert alert-danger">{{ error }}</div>
 <p v-else-if="!shares" class="text-muted">Loading…</p>
@@ -82,6 +97,7 @@ export default {
         <td>{{ s.template }}</td>
         <td>{{ s.parameters }}</td>
         <td>{{ s.user_name }}</td>
+        <td><a v-for="t in s.tags" :href="tagUrl(t)" class="badge text-bg-light text-decoration-none me-1">{{ t }}</a></td>
         <td>
           <template v-if="s.last_completed">
             {{ formatTime(s.last_completed) }}
@@ -91,7 +107,10 @@ export default {
         </td>
         <td class="text-nowrap">
           <a class="btn btn-sm btn-outline-primary" :href="'/?share=' + s.id">Open</a>
-          <button v-if="user === s.user_name" class="btn btn-sm btn-outline-danger ms-1" @click="remove(s)">Delete</button>
+          <template v-if="user === s.user_name">
+            <button class="btn btn-sm btn-outline-secondary ms-1" @click="editTags(s)">Tags</button>
+            <button class="btn btn-sm btn-outline-danger ms-1" @click="remove(s)">Delete</button>
+          </template>
         </td>
       </tr>
     </tbody>

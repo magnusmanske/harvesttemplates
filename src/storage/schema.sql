@@ -43,3 +43,10 @@ CREATE TABLE IF NOT EXISTS share (
     last_done INT UNSIGNED NULL,
     last_errors INT UNSIGNED NULL
 ) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+
+CREATE TABLE IF NOT EXISTS share_tag (
+    share_id BIGINT UNSIGNED NOT NULL,
+    tag VARCHAR(64) NOT NULL,
+    PRIMARY KEY (share_id, tag),
+    KEY tag (tag)
+) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;

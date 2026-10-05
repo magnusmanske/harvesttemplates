@@ -293,7 +293,7 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 | 172 | Formatter‑URL links in table | 2 ✓ | Use P1630 |
 | 145 | Limit to instances of X | 2 ✓ | Batched WDQS filter on candidates |
 | 71 | SPARQL / PetScan source | 2 ✓ | Filters on the candidates: PetScan PSID, SPARQL `?item` |
-| 174 | Tags for shares | 2 | `share_tag` |
+| 174 | Tags for shares | 2 ✓ | `share_tag`; linkable as `#/shares/TAG` |
 | 122 | Ignore templates far down | 2 ✓ | Option: lead section only |
 | 56 | `wbparsevalue` | 2 | Use as validator/fallback for time & quantity |
 | 118 | testwikis | 3 | Repo from `meta=wikibase`; parametrise Wikidata URLs |
