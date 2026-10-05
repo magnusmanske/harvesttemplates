@@ -23,6 +23,9 @@ pub mod constraints;
 pub mod harvest;
 pub mod http;
 pub mod ids;
+pub mod storage;
+#[cfg(test)]
+mod test_support;
 pub mod value;
 pub mod wiki;
 pub mod wikidata;

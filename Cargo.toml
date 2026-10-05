@@ -37,6 +37,7 @@ urlencoding = "2"
 
 [dev-dependencies]
 tempfile = "3"
+testcontainers-modules = { version = "0.15", features = ["mariadb"] }
 tokio = { version = "1", features = ["test-util"] }
 wiremock = "0.6"
 
