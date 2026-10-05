@@ -1,6 +1,8 @@
 use super::oauth::Token;
 use crate::api::ApiError;
+use crate::config::Secret;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use tower_sessions::Session;
 
 const KEY: &str = "login";
@@ -43,7 +45,31 @@ pub async fn clear(session: &Session) -> Result<(), ApiError> {
     session.flush().await.map_err(|e| ApiError::Internal(e.into()))
 }
 
+static DEV_USER: OnceLock<User> = OnceLock::new();
+
+/// Development only: every request counts as logged in as `name`. Its token is
+/// fake, so editing fails; previews work. Refused on Toolforge.
+pub fn enable_dev_user(name: &str) -> anyhow::Result<()> {
+    if std::path::Path::new("/etc/wmcs-project").exists() {
+        anyhow::bail!("--dev-user is not allowed on Toolforge");
+    }
+    let token = Token {
+        access: Secret::from("dev"),
+        refresh: None,
+        expires_at: 0,
+    };
+    let _ = DEV_USER.set(User {
+        id: 0,
+        name: name.to_string(),
+        token,
+    });
+    Ok(())
+}
+
 pub async fn current_user(session: &Session) -> Option<User> {
+    if let Some(user) = DEV_USER.get() {
+        return Some(user.clone());
+    }
     match load(session).await {
         Login::LoggedIn(user) => Some(user),
         _ => None,

@@ -3,6 +3,7 @@ use crate::auth::{Editor, User, require_user};
 use crate::harvest::worker::{self, Mode, Worker};
 use crate::harvest::{Job, JobSpec, RowStatus, RunStatus};
 use crate::storage::{Owner, RowRecord, RunRecord};
+use crate::wiki::site::host_for;
 use axum::extract::{Path, Query, State};
 use axum::http::header;
 use axum::response::IntoResponse;
@@ -63,8 +64,10 @@ async fn show(State(app): State<SharedState>, Path(id): Path<u64>) -> ApiResult<
     let run = app.store.run(id).await?.ok_or(ApiError::NotFound)?;
     let counts = app.store.counts(id).await?;
     let permalink = run.spec.to_legacy_query();
+    let host = host_for(&run.spec.siteid, &run.spec.project).ok();
+    let active = app.runs.is_active(id);
     Ok(Json(
-        json!({ "run": run, "counts": counts, "active": app.runs.is_active(id), "permalink": permalink }),
+        json!({ "run": run, "counts": counts, "active": active, "permalink": permalink, "host": host }),
     ))
 }
 

@@ -15,6 +15,9 @@ struct Cli {
     /// Port to listen on. Toolforge sets `PORT`.
     #[arg(long, env = "PORT", default_value_t = 8000)]
     port: u16,
+    /// Development only: treat every request as logged in as this user (cannot edit).
+    #[arg(long)]
+    dev_user: Option<String>,
 }
 
 #[tokio::main]
@@ -23,6 +26,10 @@ async fn main() -> Result<()> {
         .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
         .init();
     let cli = Cli::parse();
+    if let Some(name) = &cli.dev_user {
+        harvesttemplates::auth::session::enable_dev_user(name)?;
+        tracing::warn!("development mode: everyone is logged in as {name}");
+    }
     let config = Config::load(&cli.config)?;
     let state = Arc::new(AppState::new(config)?);
     state.store.migrate().await?;

@@ -13,7 +13,7 @@ use axum::Router;
 use axum::extract::Request;
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use std::sync::Arc;
 use std::time::Duration;
@@ -63,6 +63,7 @@ pub fn router(state: SharedState) -> Router {
     Router::new()
         .nest("/api", api)
         .route(&callback, get(auth::callback))
+        .route("/share.php", get(|| async { Redirect::permanent("/#/shares") }))
         .fallback_service(static_files)
         .layer(sessions)
         .layer(middleware)
