@@ -22,4 +22,5 @@ pub mod http;
 pub mod ids;
 pub mod value;
 pub mod wiki;
+pub mod wikidata;
 pub mod wikitext;

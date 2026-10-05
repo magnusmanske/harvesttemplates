@@ -126,6 +126,28 @@ impl Value {
         }
     }
 
+    /// Does an existing Wikibase `datavalue` already express this value?
+    /// An existing date counts if it is at least as precise and agrees on our fields.
+    pub fn matches(&self, datavalue: &Json) -> bool {
+        let v = &datavalue["value"];
+        match self {
+            Self::Item(q) => v["id"].as_str() == Some(q.to_string().as_str()),
+            Self::String(s) => v.as_str() == Some(s.as_str()),
+            Self::Time { date, .. } => existing_date(v).is_some_and(|d| {
+                d.year == date.year
+                    && (date.month == 0 || d.month == date.month)
+                    && (date.day == 0 || d.day == date.day)
+            }),
+            Self::Quantity { amount, .. } => {
+                let parse = |s: &str| s.parse::<f64>().ok();
+                matches!((v["amount"].as_str().and_then(parse), parse(amount)), (Some(a), Some(b)) if (a - b).abs() < f64::EPSILON)
+            }
+            Self::Monolingual { text, language } => {
+                v["text"] == text.as_str() && v["language"] == language.as_str()
+            }
+        }
+    }
+
     /// Short human-readable form for the results table.
     pub fn display(&self) -> String {
         match self {
@@ -140,6 +162,20 @@ impl Value {
             Self::Monolingual { text, language } => format!("{text} ({language})"),
         }
     }
+}
+
+/// Year, month and day of a Wikibase time value, honouring its precision.
+fn existing_date(value: &Json) -> Option<Date> {
+    let time = value["time"].as_str()?.strip_prefix('+')?;
+    let mut parts = time.split(['-', 'T']);
+    let year = parts.next()?.parse().ok()?;
+    let (month, day): (u8, u8) = (parts.next()?.parse().ok()?, parts.next()?.parse().ok()?);
+    let precision = value["precision"].as_u64().unwrap_or(11);
+    Some(Date {
+        year,
+        month: if precision >= 10 { month } else { 0 },
+        day: if precision >= 11 { day } else { 0 },
+    })
 }
 
 pub fn entity_uri(id: impl std::fmt::Display) -> String {
@@ -188,5 +224,43 @@ mod tests {
             "http://www.wikidata.org/entity/Q1985786"
         );
         assert_eq!(Value::Item(ItemId(42)).datavalue()["value"]["id"], "Q42");
+    }
+
+    #[test]
+    fn matching_existing_values() {
+        let time =
+            |time: &str, precision: u8| json!({"value": {"time": time, "precision": precision}});
+        let year = Value::Time {
+            date: Date {
+                year: 1950,
+                month: 0,
+                day: 0,
+            },
+            calendar: Calendar::Gregorian,
+        };
+        let day = Value::Time {
+            date: Date {
+                year: 1950,
+                month: 5,
+                day: 12,
+            },
+            calendar: Calendar::Gregorian,
+        };
+        assert!(
+            year.matches(&time("+1950-05-12T00:00:00Z", 11)),
+            "a more precise date covers a year"
+        );
+        assert!(
+            !day.matches(&time("+1950-00-00T00:00:00Z", 9)),
+            "a year does not cover a full date"
+        );
+        assert!(day.matches(&time("+1950-05-12T00:00:00Z", 11)));
+        let qty = Value::Quantity {
+            amount: "+62".into(),
+            unit: None,
+        };
+        assert!(qty.matches(&json!({"value": {"amount": "+62.0"}})));
+        assert!(Value::String("tt1".into()).matches(&json!({"value": "tt1"})));
+        assert!(!Value::String("tt1".into()).matches(&json!({"value": "tt2"})));
     }
 }
