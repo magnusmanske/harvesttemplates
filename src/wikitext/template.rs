@@ -19,20 +19,23 @@ pub struct TemplateMatcher {
 impl TemplateMatcher {
     /// `names` are the template and the redirects to it, without namespace prefix.
     /// `first_letter_case_insensitive` is `false` only on wikis like Wiktionary.
-    pub fn new<'a>(
-        names: impl IntoIterator<Item = &'a str>,
-        namespace_prefixes: impl IntoIterator<Item = &'a str>,
+    pub fn new(
+        names: impl IntoIterator<Item = impl AsRef<str>>,
+        namespace_prefixes: impl IntoIterator<Item = impl AsRef<str>>,
         first_letter_case_insensitive: bool,
     ) -> Self {
         let mut matcher = Self {
             names: HashSet::new(),
             namespace_prefixes: namespace_prefixes
                 .into_iter()
-                .map(|p| normalize_spaces(p).to_lowercase())
+                .map(|p| normalize_spaces(p.as_ref()).to_lowercase())
                 .collect(),
             first_letter_case_insensitive,
         };
-        matcher.names = names.into_iter().map(|n| matcher.normalize(n)).collect();
+        matcher.names = names
+            .into_iter()
+            .map(|n| matcher.normalize(n.as_ref()))
+            .collect();
         matcher
     }
 

@@ -18,6 +18,8 @@
 pub mod api;
 pub mod app_state;
 pub mod config;
+pub mod http;
 pub mod ids;
 pub mod value;
+pub mod wiki;
 pub mod wikitext;
