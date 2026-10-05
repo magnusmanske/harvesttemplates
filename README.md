@@ -18,37 +18,27 @@ the long-standing problems:
 - A proper template parser handles spaces, nested templates, `{{!}}` and comments.
 - One bad row is logged and skipped; it no longer stops the run.
 
-> **Status:** under construction. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** backend complete. Loading and preview are verified on live wikis
+> (read-only); editing is tested against mocks only so far. The web frontend is
+> next. See [PLAN.md](PLAN.md) for the roadmap.
 
-## Running locally
+## Documentation
 
-Requirements: Rust (stable), and for the database tests Docker.
+- [Architecture](docs/ARCHITECTURE.md): modules, the life of a run, design decisions
+- [Harvest pipeline](docs/HARVEST_PIPELINE.md): what happens to each page, value parsing, every message
+- [Constraint checks](docs/CONSTRAINTS.md)
+- [HTTP API](docs/API.md)
+- [Development and deployment](docs/DEVELOPMENT.md)
+
+## Quick start
 
 ```sh
-cp config.json.template config.json   # fill in credentials; never commit this file
+cp config.json.template config.json   # fill in; never commit this file
 cargo run -- --config config.json     # http://localhost:8000
+cargo test                            # DB tests need Docker
 ```
 
-The tool database and wiki replicas live on Toolforge. Reach them through SSH tunnels:
-
-```sh
-ssh -N -L 3308:tools.db.svc.wikimedia.cloud:3306 you@login.toolforge.org
-ssh -N -L 3310:enwiki.analytics.db.svc.wikimedia.cloud:3306 you@login.toolforge.org
-```
-
-and map them in `config.json`: point `tool_db.url` at `127.0.0.1:3308`, and add
-`"enwiki": "127.0.0.1:3310"` to `replicas.overrides`. Wikis without a tunnel
-fall back to the (slower) MediaWiki API.
-
-## Development
-
-```sh
-cargo test                                # unit + DB tests (needs Docker)
-cargo clippy --all-targets -- -D warnings
-cargo fmt
-```
-
-CI runs all three on every push. Code style and project rules are in [CLAUDE.md](CLAUDE.md).
+Code style and project rules are in [CLAUDE.md](CLAUDE.md).
 
 ## License
 
