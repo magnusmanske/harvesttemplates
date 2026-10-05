@@ -1,12 +1,14 @@
 //! Turning a cleaned template value into a Wikibase data value.
 //! Network-dependent steps (item lookup, file existence) live in the harvest pipeline.
 
+mod coordinate;
 mod links;
 mod numerals;
 mod quantity;
 mod time;
 mod transform;
 
+pub use coordinate::{Coordinate, parse_coordinate, parse_coordinate_parts};
 pub use links::{LinkChoice, file_name, link_target, url};
 pub use quantity::{DecimalMark, parse_amount, split_unit, unit_key};
 pub use time::{Calendar, Date, DateLimit, Relation, parse_date, parse_date_parts};
@@ -35,6 +37,8 @@ pub enum Datatype {
     Quantity,
     #[serde(rename = "monolingualtext")]
     Monolingual,
+    #[serde(rename = "globe-coordinate")]
+    GlobeCoordinate,
 }
 
 impl Datatype {
@@ -71,10 +75,12 @@ pub enum ValueError {
     NotAFile,
     #[error("not a URL")]
     NotAUrl,
+    #[error("could not find a coordinate")]
+    NoCoordinate,
 }
 
 /// A parsed value, ready to become a Wikibase snak.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Value {
     Item(ItemId),
@@ -92,6 +98,7 @@ pub enum Value {
         text: String,
         language: String,
     },
+    Coordinate(Coordinate),
 }
 
 impl Value {
@@ -120,6 +127,13 @@ impl Value {
                 "type": "monolingualtext",
                 "value": { "text": text, "language": language },
             }),
+            Self::Coordinate(c) => json!({
+                "type": "globecoordinate",
+                "value": {
+                    "latitude": c.latitude, "longitude": c.longitude, "altitude": null,
+                    "precision": c.precision, "globe": entity_uri(EARTH),
+                },
+            }),
         }
     }
 
@@ -140,6 +154,12 @@ impl Value {
                 matches!((v["amount"].as_str().and_then(parse), parse(amount)), (Some(a), Some(b)) if (a - b).abs() < f64::EPSILON)
             }
             Self::Monolingual { text, language } => v["text"] == text.as_str() && v["language"] == language.as_str(),
+            Self::Coordinate(c) => {
+                let tolerance = c.precision.max(0.001);
+                let near =
+                    |key: &str, ours: f64| v[key].as_f64().is_some_and(|theirs| (theirs - ours).abs() <= tolerance);
+                near("latitude", c.latitude) && near("longitude", c.longitude)
+            }
         }
     }
 
@@ -153,9 +173,15 @@ impl Value {
             Self::Quantity { amount, unit: Some(u) } => format!("{amount} {u}"),
             Self::Quantity { amount, unit: None } => amount.clone(),
             Self::Monolingual { text, language } => format!("{text} ({language})"),
+            Self::Coordinate(c) => {
+                let decimals = (-c.precision.log10()).ceil().clamp(0.0, 9.0) as usize;
+                format!("{:.decimals$}, {:.decimals$}", c.latitude, c.longitude)
+            }
         }
     }
 }
+
+const EARTH: ItemId = ItemId(2);
 
 /// Year, month and day of a Wikibase time value, honouring its precision.
 pub fn existing_date(value: &Json) -> Option<Date> {
@@ -190,12 +216,20 @@ mod tests {
 
     #[test]
     fn datatype_names_round_trip() {
-        for name in
-            ["wikibase-item", "string", "external-id", "url", "commonsMedia", "time", "quantity", "monolingualtext"]
-        {
+        for name in [
+            "wikibase-item",
+            "string",
+            "external-id",
+            "url",
+            "commonsMedia",
+            "time",
+            "quantity",
+            "monolingualtext",
+            "globe-coordinate",
+        ] {
             assert_eq!(Datatype::from_wikibase(name).unwrap().wikibase_name(), name);
         }
-        assert_eq!(Datatype::from_wikibase("globe-coordinate"), None);
+        assert_eq!(Datatype::from_wikibase("geo-shape"), None);
     }
 
     #[test]

@@ -77,6 +77,7 @@ Row status: `pending`, `ready` (previewed, would be added), `done`, `skipped`, `
 All fields are optional; the defaults are shown. `template_redirects: null`
 accepts every redirect; `constraints: null` checks every supported constraint.
 `date_parameters` is `{"year": "…", "month": "…", "day": "…"}` (month and day optional).
+`coordinate_parameters` is `{"latitude": "…", "longitude": "…"}` (permalink: `latparam`, `lonparam`).
 Fixed qualifier values are written as on Wikidata: `Q1860`, `2024-05-01`, `42`,
 or `text@language` for monolingual text. In permalinks a qualifier is
 `qualifier=P407|fixed|Q1860` or `qualifier=P10135|param|date,datum`.

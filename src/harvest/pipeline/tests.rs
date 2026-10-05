@@ -226,3 +226,36 @@ async fn quantities_with_unit_suffixes() {
 fn json_value(id: &str) -> Json {
     serde_json::json!({"snaktype": "value", "datavalue": {"type": "wikibase-entityid", "value": {"id": id}}})
 }
+
+#[tokio::test]
+async fn coordinates_from_nested_and_direct_templates() {
+    use crate::harvest::spec::CoordinateParameters;
+    use crate::test_support::mock;
+    let (server, clients) = world().await;
+    mock(
+        &server,
+        "ids=P625&",
+        serde_json::json!({"entities": {"P625": {"id": "P625", "datatype": "globe-coordinate", "claims": {}}}}),
+    )
+    .await;
+    let base = JobSpec { property: Some(PropertyId(625)), template: "X".into(), ..Default::default() };
+    let at = |spec: JobSpec, text: &'static str| {
+        let clients = &clients;
+        async move {
+            let job = Job::prepare(clients, spec).await.unwrap();
+            evaluate(&job, clients, &page(Some(1)), &revision(text)).await.result.map(|e| e.value.display())
+        }
+    };
+    let nested = JobSpec { parameters: vec!["coordinates".into()], ..base.clone() };
+    let text = "{{X|coordinates = {{coord|52|31|N|13|24|E|display=inline,title}}}}";
+    assert_eq!(at(nested.clone(), text).await, Ok("52.52, 13.40".to_string()));
+    assert_eq!(at(nested, "{{X|coordinates=48.8584, 2.2945}}").await, Ok("48.8584, 2.2945".to_string()));
+    let direct = JobSpec { parameters: vec!["1".into()], ..base.clone() };
+    assert_eq!(at(direct, "{{X|48.8584|2.2945|type:landmark}}").await, Ok("48.8584, 2.2945".to_string()));
+    let parts = JobSpec {
+        coordinate_parameters: Some(CoordinateParameters { latitude: "lat".into(), longitude: "lon".into() }),
+        ..base
+    };
+    assert_eq!(at(parts.clone(), "{{X|lat=-33.86|lon=151.21}}").await, Ok("-33.86, 151.21".to_string()));
+    assert_eq!(at(parts, "{{X|lat=-33.86}}").await, Err(skip("no value")));
+}

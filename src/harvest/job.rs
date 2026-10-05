@@ -147,6 +147,7 @@ fn fixed_value(datatype: Datatype, text: &str, spec: &JobSpec) -> Result<Value, 
             Value::Quantity { amount: value::parse_amount(text, DecimalMark::Point).map_err(err)?, unit: None }
         }
         Datatype::Url => Value::String(value::url(text).map_err(err)?),
+        Datatype::GlobeCoordinate => Value::Coordinate(value::parse_coordinate(text, &[]).map_err(err)?),
         Datatype::Monolingual => {
             let (text, language) = text.rsplit_once('@').ok_or("write it as text@language")?;
             check_language(language).map_err(|e| e.to_string())?;
@@ -163,7 +164,10 @@ fn check_value_source(spec: &JobSpec) -> Result<(), JobError> {
     if spec.template.trim().is_empty() {
         return Err(invalid("choose a template"));
     }
-    let has_source = spec.use_page_title || spec.date_parameters.is_some() || !spec.parameters.is_empty();
+    let has_source = spec.use_page_title
+        || spec.date_parameters.is_some()
+        || spec.coordinate_parameters.is_some()
+        || !spec.parameters.is_empty();
     if !has_source {
         return Err(invalid("choose a template parameter"));
     }
@@ -184,6 +188,9 @@ fn check_property(property: &PropertyInfo, spec: &JobSpec) -> Result<Datatype, J
     }
     if spec.date_parameters.is_some() && datatype != Datatype::Time {
         return Err(invalid("year/month/day parameters only work for dates"));
+    }
+    if spec.coordinate_parameters.is_some() && datatype != Datatype::GlobeCoordinate {
+        return Err(invalid("latitude/longitude parameters only work for coordinates"));
     }
     Ok(datatype)
 }

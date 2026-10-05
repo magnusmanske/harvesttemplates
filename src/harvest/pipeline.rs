@@ -96,6 +96,7 @@ async fn steps(
 enum RawValue {
     Text(String),
     DateParts { year: String, month: Option<String>, day: Option<String> },
+    CoordinateParts { latitude: String, longitude: String },
 }
 
 impl std::fmt::Display for RawValue {
@@ -106,6 +107,7 @@ impl std::fmt::Display for RawValue {
                 let parts = [Some(year), month.as_ref(), day.as_ref()];
                 f.write_str(&parts.into_iter().flatten().cloned().collect::<Vec<_>>().join(" / "))
             }
+            Self::CoordinateParts { latitude, longitude } => write!(f, "{latitude} / {longitude}"),
         }
     }
 }
@@ -128,6 +130,11 @@ fn extract(job: &Job, page: &Page, wikitext: &str) -> Result<Found, Rejection> {
         let get = |name: &Option<String>| name.as_deref().and_then(|n| p.get(n)).map(clean_value);
         let year = p.get(&dp.year).map(clean_value).ok_or_else(|| skip("no value"))?;
         RawValue::DateParts { year, month: get(&dp.month), day: get(&dp.day) }
+    } else if let Some(cp) = &job.spec.coordinate_parameters {
+        let get = |name: &str| p.get(name).map(str::to_string).ok_or_else(|| skip("no value"));
+        RawValue::CoordinateParts { latitude: get(&cp.latitude)?, longitude: get(&cp.longitude)? }
+    } else if job.datatype == Datatype::GlobeCoordinate {
+        RawValue::Text(coordinate_text(p, &job.spec.parameters).ok_or_else(|| skip("no value"))?)
     } else {
         let raw = p.first_of(job.spec.parameters.iter().map(String::as_str)).ok_or_else(|| skip("no value"))?;
         RawValue::Text(clean_value(raw))
@@ -135,8 +142,20 @@ fn extract(job: &Job, page: &Page, wikitext: &str) -> Result<Found, Rejection> {
     Ok(Found { raw, params })
 }
 
+/// The raw (uncleaned) value, so a nested `{{coord}}` survives. An unnamed
+/// parameter brings the following unnamed ones along: `{{coord|52|31|N|13|24|E}}`.
+fn coordinate_text(params: &TemplateParams, names: &[String]) -> Option<String> {
+    let name = names.iter().find(|n| params.get(n).is_some())?;
+    let Ok(first) = name.trim().parse::<usize>() else { return params.get(name).map(str::to_string) };
+    let run: Vec<&str> = (first..).map_while(|i| params.get(&i.to_string())).collect();
+    Some(run.join(" "))
+}
+
 async fn parse(job: &Job, clients: &Clients, raw: &RawValue, item: ItemId) -> Result<Value, Rejection> {
     let text = match raw {
+        RawValue::CoordinateParts { latitude, longitude } => {
+            return value::parse_coordinate_parts(latitude, longitude).map(Value::Coordinate).map_err(bad_value);
+        }
         RawValue::DateParts { year, month, day } => {
             let date =
                 value::parse_date_parts(year, month.as_deref(), day.as_deref(), &job.site.lang, job.spec.calendar);
@@ -178,6 +197,9 @@ async fn parse_as(
             Ok(Value::Quantity { amount, unit })
         }
         Datatype::Monolingual => Ok(Value::Monolingual { text, language: spec.language.clone() }),
+        Datatype::GlobeCoordinate => {
+            value::parse_coordinate(&text, &job.site.template_prefixes).map(Value::Coordinate).map_err(bad_value)
+        }
     }
 }
 

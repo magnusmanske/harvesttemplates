@@ -57,6 +57,10 @@ export default {
       get: () => (spec.date_parameters ? 'parts' : 'single'),
       set: (mode) => { spec.date_parameters = mode === 'parts' ? { year: '', month: '', day: '' } : null; },
     });
+    const coordinateMode = computed({
+      get: () => (spec.coordinate_parameters ? 'parts' : 'single'),
+      set: (mode) => { spec.coordinate_parameters = mode === 'parts' ? { latitude: '', longitude: '' } : null; },
+    });
 
     const lookup = async (key, target, request) => {
       try {
@@ -141,7 +145,7 @@ export default {
 
     return {
       spec, ready, notice, error, busy, site, template, property, lookupErrors, permalink, limitText, propertyText,
-      datatype, namespaces, redirects, checkable, dateMode, manualListText, PROJECTS, user,
+      datatype, namespaces, redirects, checkable, dateMode, coordinateMode, manualListText, PROJECTS, user,
       submit, setLimit, entityUrl,
       redirectChecked: (name) => spec.template_redirects === null || spec.template_redirects.includes(name),
       toggleRedirect: (name) => { spec.template_redirects = toggled(spec.template_redirects, redirects.value, name); },
@@ -208,7 +212,15 @@ export default {
           <input type="radio" class="btn-check" id="dm-single" value="single" v-model="dateMode"><label class="btn btn-outline-secondary" for="dm-single">one parameter</label>
           <input type="radio" class="btn-check" id="dm-parts" value="parts" v-model="dateMode"><label class="btn btn-outline-secondary" for="dm-parts">year / month / day</label>
         </div>
-        <template v-if="spec.date_parameters">
+        <div v-if="datatype === 'globe-coordinate'" class="btn-group btn-group-sm mb-2" role="group">
+          <input type="radio" class="btn-check" id="cm-single" value="single" v-model="coordinateMode"><label class="btn btn-outline-secondary" for="cm-single">one parameter</label>
+          <input type="radio" class="btn-check" id="cm-parts" value="parts" v-model="coordinateMode"><label class="btn btn-outline-secondary" for="cm-parts">latitude / longitude</label>
+        </div>
+        <template v-if="spec.coordinate_parameters">
+          <input v-model.trim="spec.coordinate_parameters.latitude" class="form-control mb-1" placeholder="latitude parameter">
+          <input v-model.trim="spec.coordinate_parameters.longitude" class="form-control mb-1" placeholder="longitude parameter">
+        </template>
+        <template v-else-if="spec.date_parameters">
           <input v-model.trim="spec.date_parameters.year" class="form-control mb-1" placeholder="year parameter">
           <input v-model.trim="spec.date_parameters.month" class="form-control mb-1" placeholder="month parameter (optional)">
           <input v-model.trim="spec.date_parameters.day" class="form-control mb-1" placeholder="day parameter (optional)">
@@ -220,6 +232,7 @@ export default {
             <button v-if="spec.parameters.length > 1" type="button" class="btn btn-outline-secondary" @click="spec.parameters.splice(i, 1)" title="remove">×</button>
           </div>
           <button type="button" class="btn btn-sm btn-link px-0" @click="spec.parameters.push('')">+ add alias</button>
+          <div v-if="datatype === 'globe-coordinate'" class="form-text">A nested {{coord|…}} is read. An unnamed parameter takes the following unnamed ones along, for harvesting {{coord}} itself.</div>
         </template>
         <div class="form-check mt-1">
           <input type="checkbox" class="form-check-input" id="pagetitle" v-model="spec.use_page_title">

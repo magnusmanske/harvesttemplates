@@ -284,7 +284,7 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 | 205 | Unnamed params docs | 1 | UI hint + docs |
 | 40 | Multiple values per property | 1 | "skip if exact value exists" option |
 | 210, 133 | Qualifiers | 2 ✓ | Fixed qualifier(s) per run; qualifier from another template param. Harvested value *as* a qualifier on a fixed main value (#133, first part) not done. |
-| 16 | globe-coordinate | 2 | lat/lon params or `{{coord}}` style |
+| 16 | globe-coordinate | 2 ✓ | lat/lon params or `{{coord}}` style |
 | 136, 15 | Unit suffix in quantity | 2 ✓ | Match unit label/alias/symbol |
 | 135 | Calendar switch date | 2 | Full date instead of year |
 | 130 | Archive URLs | 2 | Detect `web.archive.org`, option: skip / extract original |

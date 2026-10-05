@@ -53,6 +53,13 @@ impl QualifierSpec {
     }
 }
 
+/// Separate template parameters for latitude and longitude.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoordinateParameters {
+    pub latitude: String,
+    pub longitude: String,
+}
+
 /// Separate template parameters for year, month and day.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DateParameters {
@@ -74,6 +81,7 @@ pub struct JobSpec {
     /// Parameter name and aliases; the first one with a value wins.
     pub parameters: Vec<String>,
     pub date_parameters: Option<DateParameters>,
+    pub coordinate_parameters: Option<CoordinateParameters>,
     /// Use the page title as the value instead of a parameter.
     pub use_page_title: bool,
     pub transform: TransformSpec,
@@ -111,6 +119,7 @@ impl Default for JobSpec {
             template_redirects: None,
             parameters: vec![],
             date_parameters: None,
+            coordinate_parameters: None,
             use_page_title: false,
             transform: TransformSpec::default(),
             plain_links: true,
@@ -154,6 +163,8 @@ impl JobSpec {
                 "aparameter3" if !v.is_empty() => {
                     date_parameters(&mut spec).day = Some(v.to_string());
                 }
+                "latparam" if !v.is_empty() => coordinate_parameters(&mut spec).latitude = v.to_string(),
+                "lonparam" if !v.is_empty() => coordinate_parameters(&mut spec).longitude = v.to_string(),
                 "pagetitle" => spec.use_page_title = v == "1",
                 "addprefix" | "prefix" => spec.transform.add_prefix = value.clone(),
                 "addsuffix" => spec.transform.add_suffix = value.clone(),
@@ -213,6 +224,11 @@ impl JobSpec {
             q.extend(dp.month.clone().map(|m| ("aparameter2", m)));
             q.extend(dp.day.clone().map(|day| ("aparameter3", day)));
         }
+        if let Some(cp) = &self.coordinate_parameters {
+            q.push(("latparam", cp.latitude.clone()));
+            q.push(("lonparam", cp.longitude.clone()));
+        }
+
         for (key, value) in [
             ("addprefix", &t.add_prefix),
             ("addsuffix", &t.add_suffix),
@@ -267,6 +283,11 @@ fn date_parameters(spec: &mut JobSpec) -> &mut DateParameters {
 
 fn split_pipes(s: &str) -> Vec<String> {
     s.split('|').map(str::trim).filter(|p| !p.is_empty()).map(String::from).collect()
+}
+
+fn coordinate_parameters(spec: &mut JobSpec) -> &mut CoordinateParameters {
+    spec.coordinate_parameters
+        .get_or_insert_with(|| CoordinateParameters { latitude: String::new(), longitude: String::new() })
 }
 
 fn split_commas(s: &str) -> Vec<String> {
@@ -337,6 +358,7 @@ mod tests {
         );
         spec.manual_list = vec!["Page one".into(), "Q42".into()];
         spec.link_choice = LinkChoice::Last;
+        spec.coordinate_parameters = Some(CoordinateParameters { latitude: "lat".into(), longitude: "long".into() });
         spec.qualifiers = vec![
             QualifierSpec { property: PropertyId(407), source: QualifierSource::Fixed { value: "Q1860".into() } },
             QualifierSpec {

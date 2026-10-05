@@ -37,6 +37,7 @@ message a user can see in the results table.
 | time | See below. Calendar and optional date limit from the spec. |
 | quantity | Any digit script, thousands separators removed, chosen decimal mark. A unit after the number (`82 g`, `2,4 [[kilogram\|kg]]`) is matched against the names, aliases and symbols of the allowed units (or the chosen one); otherwise the chosen unit. |
 | monolingualtext | The value, with the language code from the spec. |
+| globe-coordinate | Decimal pairs (`52.52, 13.405`), degrees/minutes/seconds with N/S/E/W, a nested `{{coord}}` (its leading unnamed parameters), or separate latitude/longitude parameters. Choosing an unnamed parameter such as `1` reads the following unnamed ones too, for harvesting `{{coord}}` itself. Precision follows the input. |
 
 ### Dates
 
@@ -68,6 +69,7 @@ To add a language, add its month names to `data/monthnames.json`.
 | error | the link points to the page itself | |
 | error | not a file name / the file does not exist / the file is only on X, not on Commons | |
 | error | not a URL | |
+| error | could not find a coordinate | |
 | error | the item does not exist | deleted item |
 | error | constraint violation: *name* | |
 | error | qualifier P…: *reason* | a qualifier parameter could not be parsed |

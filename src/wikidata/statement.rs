@@ -41,7 +41,7 @@ pub fn snak(property: PropertyId, datatype: Datatype, value: &Value) -> Json {
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Qualifier {
     pub property: PropertyId,
     pub datatype: Datatype,
