@@ -170,26 +170,47 @@ async fn live_preview_on_enwiki() {
     use crate::wiki::{ApiSource, Replicas, WithFallback};
     let config = crate::config::Config::load("config.json".as_ref()).unwrap();
     let clients = Clients::new(&crate::app_state::http_client(&config.user_agent).unwrap());
-    let source = WithFallback { primary: Replicas::new(config.replicas), fallback: ApiSource { api: clients.mw.clone() } };
+    let source = WithFallback {
+        primary: Replicas::new(config.replicas),
+        fallback: ApiSource {
+            api: clients.mw.clone(),
+        },
+    };
     let spec = JobSpec {
         property: Some(PropertyId(345)),
         template: "IMDb title".into(),
         parameters: vec!["id".into(), "1".into()],
-        transform: TransformSpec { add_prefix: "tt".into(), ..Default::default() },
+        transform: TransformSpec {
+            add_prefix: "tt".into(),
+            ..Default::default()
+        },
         category: "2024 films".into(),
         depth: 1,
         ..Default::default()
     };
     let job = Job::prepare(&clients, spec).await.unwrap();
-    let limits = crate::wiki::Limits { max_pages: 500_000, max_depth: 30, max_categories: 20_000 };
+    let limits = crate::wiki::Limits {
+        max_pages: 500_000,
+        max_depth: 30,
+        max_categories: 20_000,
+    };
     let started = std::time::Instant::now();
     let (pages, excluded) = candidates(&job, &clients, &source, limits).await.unwrap();
-    println!("{} candidates in {:?}, excluded {excluded:?}", pages.len(), started.elapsed());
+    println!(
+        "{} candidates in {:?}, excluded {excluded:?}",
+        pages.len(),
+        started.elapsed()
+    );
     let ids: Vec<u64> = pages.iter().take(10).map(|p| p.id).collect();
-    let revisions = crate::wiki::content::revisions(&clients.mw, &job.site, &ids).await.unwrap();
+    let revisions = crate::wiki::content::revisions(&clients.mw, &job.site, &ids)
+        .await
+        .unwrap();
     for page in pages.iter().take(10) {
         let out = evaluate(&job, &clients, page, &revisions[&page.id]).await;
         let result = out.result.as_ref().map(|e| e.item.to_string());
-        println!("{:40} raw={:?} value={:?} -> {result:?}", page.title, out.raw, out.value);
+        println!(
+            "{:40} raw={:?} value={:?} -> {result:?}",
+            page.title, out.raw, out.value
+        );
     }
 }
