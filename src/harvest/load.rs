@@ -7,7 +7,7 @@ use crate::ids::ItemId;
 use crate::wiki::site::NS_CATEGORY;
 use crate::wiki::{Limits, Page, PageSource};
 use crate::wikitext::uppercase_first;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::Serialize;
 use std::collections::HashSet;
 
@@ -17,6 +17,7 @@ pub struct Excluded {
     pub not_in_category: usize,
     pub not_in_list: usize,
     pub no_item: usize,
+    pub not_instance: usize,
     /// Pre-filtered via WDQS; the live check before each edit catches the rest.
     pub already_set: usize,
 }
@@ -41,6 +42,11 @@ pub async fn candidates(
         excluded.not_in_list = retain(&mut pages, listed);
     }
     excluded.no_item = retain(&mut pages, |p| p.item.is_some());
+    if !spec.instance_of.is_empty() {
+        let items: Vec<ItemId> = pages.iter().filter_map(|p| p.item).collect();
+        let wanted = clients.wdqs.items_in_classes(&items, &spec.instance_of).await.context("instance-of filter")?;
+        excluded.not_instance = retain(&mut pages, |p| p.item.is_some_and(|q| wanted.contains(&q)));
+    }
     if spec.skip_if == SkipIf::Property {
         let items: Vec<ItemId> = pages.iter().filter_map(|p| p.item).collect();
         match clients.wdqs.items_with_property(job.property.id, &items).await {

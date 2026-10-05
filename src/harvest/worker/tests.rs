@@ -72,7 +72,7 @@ async fn load_preview_and_edit() {
     assert_eq!(run.status, RunStatus::Ready, "{:?}", run.message);
     assert_eq!(
         run.excluded.clone().unwrap(),
-        json!({"not_in_category": 0, "not_in_list": 0, "no_item": 1, "already_set": 1})
+        json!({"not_in_category": 0, "not_in_list": 0, "no_item": 1, "not_instance": 0, "already_set": 1})
     );
     assert_eq!(app.store.counts(run_id).await.unwrap().pending, 1);
 

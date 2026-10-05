@@ -64,6 +64,24 @@ impl Wdqs {
     }
 }
 
+impl Wdqs {
+    /// Which of `items` are instances of one of `classes`, or of their subclasses.
+    pub async fn items_in_classes(&self, items: &[ItemId], classes: &[ItemId]) -> Result<HashSet<ItemId>> {
+        let classes: Vec<String> = classes.iter().map(|c| format!("wd:{c}")).collect();
+        let mut found = HashSet::new();
+        for chunk in items.chunks(VALUES_CHUNK) {
+            let values: Vec<String> = chunk.iter().map(|q| format!("wd:{q}")).collect();
+            let sparql = format!(
+                "SELECT DISTINCT ?item {{ VALUES ?item {{ {} }} VALUES ?class {{ {} }} ?item wdt:P31/wdt:P279* ?class }}",
+                values.join(" "),
+                classes.join(" ")
+            );
+            found.extend(self.select_items(&sparql, "item").await?);
+        }
+        Ok(found)
+    }
+}
+
 pub fn item_from_uri(uri: &str) -> Option<ItemId> {
     uri.strip_prefix("http://www.wikidata.org/entity/")?.parse().ok()
 }
@@ -85,6 +103,22 @@ mod tests {
         assert_eq!(string_literal(r#"a"b\c"#), r#""a\"b\\c""#);
         assert_eq!(item_from_uri("http://www.wikidata.org/entity/Q42"), Some(ItemId(42)));
         assert_eq!(item_from_uri("http://www.wikidata.org/entity/P42"), None);
+    }
+
+    #[tokio::test]
+    async fn items_in_classes_follows_subclasses() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(body_string_contains("wdt%3AP31%2Fwdt%3AP279*"))
+            .and(body_string_contains("wd%3AQ571"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results": {"bindings": [
+                {"item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q2"}}
+            ]}})))
+            .mount(&server)
+            .await;
+        let wdqs = Wdqs::new(reqwest::Client::new(), &server.uri());
+        let found = wdqs.items_in_classes(&[ItemId(1), ItemId(2)], &[ItemId(571)]).await.unwrap();
+        assert_eq!(found, HashSet::from([ItemId(2)]));
     }
 
     #[tokio::test]

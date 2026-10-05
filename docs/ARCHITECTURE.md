@@ -21,7 +21,7 @@ browser ──▶ api/ ──┬─▶ harvest/ (jobs, pipeline, workers)
 | `api` | Routes, error mapping, sessions, CSRF guard. Thin: validates input, calls `harvest`/`storage`. |
 | `harvest::spec` | `JobSpec`: what to harvest. JSON for the API and DB; converts to/from old permalinks. |
 | `harvest::job` | `Job::prepare`: validates a spec against live data once per run. |
-| `harvest::load` | Candidate pages: transclusions, category and list filters, WDQS pre-filter. |
+| `harvest::load` | Candidate pages: transclusions, category, list and instance-of filters, WDQS pre-filter. |
 | `harvest::pipeline` | One page → planned edit or a skip/error message. Pure apart from lookups. |
 | `harvest::worker` | Background tasks: load a run; preview or edit its rows. |
 | `harvest::active` | Which runs are being worked on; per-user limit; stop flags. |

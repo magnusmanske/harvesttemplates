@@ -11,6 +11,7 @@ const EXCLUDED_LABELS = {
   not_in_category: 'not in the category',
   not_in_list: 'not in the list',
   no_item: 'without Wikidata item',
+  not_instance: 'not instances of the classes',
   already_set: 'already have the property',
 };
 

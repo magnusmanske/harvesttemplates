@@ -107,6 +107,8 @@ pub struct JobSpec {
     pub depth: u32,
     /// Page titles and/or item ids to restrict the run to.
     pub manual_list: Vec<String>,
+    /// Only items that are instances of one of these classes or their subclasses (#145).
+    pub instance_of: Vec<ItemId>,
     pub skip_if: SkipIf,
     /// Constraints to check; `None` checks all. Mandatory ones are always checked.
     pub constraints: Option<Vec<ItemId>>,
@@ -144,6 +146,7 @@ impl Default for JobSpec {
             category: String::new(),
             depth: 0,
             manual_list: vec![],
+            instance_of: vec![],
             skip_if: SkipIf::Property,
             constraints: None,
             qualifiers: vec![],
@@ -178,6 +181,7 @@ impl JobSpec {
                 "latparam" if !v.is_empty() => coordinate_parameters(&mut spec).latitude = v.to_string(),
                 "lonparam" if !v.is_empty() => coordinate_parameters(&mut spec).longitude = v.to_string(),
                 "pattern" => spec.value_pattern = value.clone(),
+                "instanceof" => spec.instance_of = split_pipes(v).iter().filter_map(|c| c.parse().ok()).collect(),
                 "archive" => {
                     spec.archive_urls = match v {
                         "skip" => ArchiveUrls::Skip,
@@ -285,6 +289,9 @@ impl JobSpec {
         }
         if !self.value_pattern.is_empty() {
             q.push(("pattern", self.value_pattern.clone()));
+        }
+        if !self.instance_of.is_empty() {
+            q.push(("instanceof", self.instance_of.iter().map(ItemId::to_string).collect::<Vec<_>>().join("|")));
         }
         match self.archive_urls {
             ArchiveUrls::Original => {}
@@ -408,6 +415,7 @@ mod tests {
         spec.value_pattern = "{1}-{2}".into();
         spec.unwrap_templates = true;
         spec.lead_only = true;
+        spec.instance_of = vec![ItemId(571), ItemId(7725634)];
         spec.archive_urls = ArchiveUrls::Skip;
         spec.transform.case = Case::Upper;
         spec.coordinate_parameters = Some(CoordinateParameters { latitude: "lat".into(), longitude: "long".into() });

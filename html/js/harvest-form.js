@@ -137,6 +137,10 @@ export default {
       spec.date_limit = on ? { relation: 'at_least', date: parseDateText(limitText.value || '1926') } : null;
       if (on && !limitText.value) limitText.value = '1926';
     };
+    const instanceOfText = computed({
+      get: () => spec.instance_of?.join(', ') ?? '',
+      set: (text) => { spec.instance_of = text.split(/[\s,|]+/).map((q) => q.trim().toUpperCase()).filter((q) => /^Q\d+$/.test(q)); },
+    });
     const manualListText = computed({
       get: () => spec.manual_list?.join('\n') ?? '',
       set: (text) => { spec.manual_list = text.split('\n').map((l) => l.trim()).filter(Boolean); },
@@ -146,7 +150,7 @@ export default {
 
     return {
       spec, ready, notice, error, busy, site, template, property, lookupErrors, permalink, limitText, propertyText,
-      datatype, namespaces, redirects, checkable, dateMode, coordinateMode, manualListText, PROJECTS, user,
+      datatype, namespaces, redirects, checkable, dateMode, coordinateMode, manualListText, instanceOfText, PROJECTS, user,
       submit, setLimit, entityUrl,
       redirectChecked: (name) => spec.template_redirects === null || spec.template_redirects.includes(name),
       toggleRedirect: (name) => { spec.template_redirects = toggled(spec.template_redirects, redirects.value, name); },
@@ -318,6 +322,8 @@ export default {
         <input v-model.number="spec.depth" type="number" min="0" max="30" class="form-control ht-short">
         <label class="form-label mt-2">Only these pages or items</label>
         <textarea v-model.lazy="manualListText" class="form-control" rows="4" placeholder="one title or Q-id per line"></textarea>
+        <label class="form-label mt-2">Only items that are instances of</label>
+        <input v-model.lazy="instanceOfText" class="form-control" placeholder="Q571, … (subclasses included)">
         <div class="form-check mt-2">
           <input type="checkbox" class="form-check-input" id="lead" v-model="spec.lead_only">
           <label class="form-check-label" for="lead">only templates before the first heading</label>
