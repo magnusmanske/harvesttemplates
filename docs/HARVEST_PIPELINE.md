@@ -51,7 +51,12 @@ year-month-day with month names in the wiki's language (`data/monthnames.json`),
 ISO `1950-05-12`, numeric `12.05.1950`/`1950/05/12` (Roman months allowed),
 CJK `1950年5月12日`, month-year, and finally a bare year (1–4 digits alone, or
 exactly one four-digit year in the text). Values with words like *circa*,
-*vor*, *nach*, *años* or a `?` are rejected as imprecise. A date passes a limit
+*c.*, *vor*, *nach*, *años* or a `?` are rejected as imprecise.
+
+Where this finds no date, or only a year in text that says more (say, a month
+name missing from our table), Wikibase's own parser (`wbparsevalue`, with
+MediaWiki's month names for every language) is asked. Its answer counts only if
+it agrees on the year and is more precise; our rejections are never overridden. A date passes a limit
 only if every day it could mean does.
 
 To add a language, add its month names to `data/monthnames.json`.

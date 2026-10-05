@@ -214,8 +214,9 @@ const ROMAN: [&str; 12] = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX
 const ROMAN_ALT: &str = "XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I";
 const YEAR_END: &str = r"(?-u:\b)";
 
-static IMPRECISE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)\b(?:años|vor|nach|ungefähr|ca|circa|around|about|before|after)\b|\?").unwrap());
+static IMPRECISE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b(?:años|vor|nach|ungefähr|ca|circa|around|about|before|after)\b|\bc\.|\?").unwrap()
+});
 static BARE_YEAR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9]{1,4}$").unwrap());
 static FOUR_DIGITS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?-u:\b)[0-9]{4}(?-u:\b)").unwrap());
 static ISO: LazyLock<Regex> = LazyLock::new(|| {
@@ -350,6 +351,8 @@ mod tests {
         assert_eq!(parse("vor 1888", "de"), Err(ValueError::ImpreciseDate));
         assert_eq!(parse("los años 1410", "es"), Err(ValueError::ImpreciseDate)); // #31
         assert_eq!(parse("c. 1900?", "en"), Err(ValueError::ImpreciseDate));
+        assert_eq!(parse("c. 1900", "en"), Err(ValueError::ImpreciseDate));
+        assert_eq!(parse("Acme Inc. 1900", "en").map(|d| d.year), Ok(1900));
         assert_eq!(parse("1950–1960", "en"), Err(ValueError::AmbiguousDate));
         assert_eq!(parse("31 February 1950", "en"), Err(ValueError::InvalidDate));
         assert_eq!(parse("unknown", "en"), Err(ValueError::NoDate));

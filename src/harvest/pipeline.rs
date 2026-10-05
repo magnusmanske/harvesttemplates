@@ -204,7 +204,7 @@ async fn parse_as(
         Datatype::CommonsMedia => commons_file(job, clients, &text).await,
         Datatype::Url => web_url(spec.archive_urls, &text),
         Datatype::String | Datatype::ExternalId => Ok(Value::String(text)),
-        Datatype::Time => time_value(job, value::parse_date(&text, &job.site.lang, spec.calendar).map_err(bad_value)?),
+        Datatype::Time => time_value(job, date(job, clients, &text).await?),
         Datatype::Quantity => {
             let (number, suffix) = value::split_unit(&text);
             let amount = value::parse_amount(&number, spec.decimal_mark).map_err(bad_value)?;
@@ -267,6 +267,25 @@ fn web_url(archive_urls: ArchiveUrls, text: &str) -> Result<Value, Rejection> {
             value::url(&original).map(Value::String).map_err(bad_value)
         }
         (Archived::Other, ArchiveUrls::Original) => Err(error("an archived copy without the original URL")),
+    }
+}
+
+/// Our parser first. Wikibase's parser (#56) helps where ours finds no date, or
+/// only a year in text that says more (an unknown month name); it is used only
+/// if it agrees on the year. Our rejections (imprecise, ambiguous) are final.
+async fn date(job: &Job, clients: &Clients, text: &str) -> Result<Date, Rejection> {
+    let ours = value::parse_date(text, &job.site.lang, job.spec.calendar);
+    let says_more_than_a_year = !text.trim().chars().all(|c| c.is_ascii_digit());
+    match ours {
+        Err(ValueError::NoDate) => {
+            let parsed = clients.wikidata.parse_time(text, &job.site.lang).await.map_err(failed)?;
+            parsed.ok_or_else(|| bad_value(ValueError::NoDate))
+        }
+        Ok(year) if year.precision() == 9 && says_more_than_a_year => {
+            let parsed = clients.wikidata.parse_time(text, &job.site.lang).await.map_err(failed)?;
+            Ok(parsed.filter(|p| p.year == year.year && p.precision() > 9).unwrap_or(year))
+        }
+        result => result.map_err(bad_value),
     }
 }
 

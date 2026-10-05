@@ -124,6 +124,14 @@ pub async fn world() -> (MockServer, Clients) {
     )
     .await;
     mock(&server, "titles=Nowhere&", json!({"query": {"pages": [{"title": "Nowhere", "missing": true}]}})).await;
+    // Like the real API for text it cannot parse; tests mount specific answers on top.
+    Mock::given(body_string_contains("action=wbparsevalue"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"results": [{"error": "ValueParsers\\ParseException"}]})),
+        )
+        .with_priority(10)
+        .mount(&server)
+        .await;
     let clients = Clients::mocked(&server.uri());
     (server, clients)
 }

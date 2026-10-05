@@ -286,16 +286,16 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 | 210, 133 | Qualifiers | 2 ✓ | Fixed qualifier(s) per run; qualifier from another template param. Harvested value *as* a qualifier on a fixed main value (#133, first part) not done. |
 | 16 | globe-coordinate | 2 ✓ | lat/lon params or `{{coord}}` style |
 | 136, 15 | Unit suffix in quantity | 2 ✓ | Match unit label/alias/symbol |
-| 135 | Calendar switch date | 2 | Full date instead of year |
+| 135 | Calendar switch date | 2 ✓ | Full date instead of year (done in phase 1) |
 | 130 | Archive URLs | 2 ✓ | Detect `web.archive.org`, option: skip / extract original |
 | 70, 147, 52 | Case, separators, split/join | 2 ✓ | case option; value pattern `{1}-{2}`; punctuation alone counts as no value |
-| 149 | Last link instead of first | 2 | Option |
+| 149 | Last link instead of first | 2 ✓ | Option (done in phase 1) |
 | 172 | Formatter‑URL links in table | 2 ✓ | Use P1630 |
 | 145 | Limit to instances of X | 2 ✓ | Batched WDQS filter on candidates |
 | 71 | SPARQL / PetScan source | 2 ✓ | Filters on the candidates: PetScan PSID, SPARQL `?item` |
 | 174 | Tags for shares | 2 ✓ | `share_tag`; linkable as `#/shares/TAG` |
 | 122 | Ignore templates far down | 2 ✓ | Option: lead section only |
-| 56 | `wbparsevalue` | 2 | Use as validator/fallback for time & quantity |
+| 56 | `wbparsevalue` | 2 ✓ | Fallback for dates (quantities: Wikibase's parser does not read units, so no gain) |
 | 118 | testwikis | 3 | Repo from `meta=wikibase`; parametrise Wikidata URLs |
 | 206, 108, 111 | Multi‑wiki / multi‑template / multi‑property | 3 | Spec becomes a list; pipeline already per (page, property) |
 | 89 | History check | 3 | Optional: scan last N summaries for a removed identical value |

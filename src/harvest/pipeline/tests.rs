@@ -290,3 +290,36 @@ async fn patterns_unwrapping_and_lead_section() {
     assert_eq!(at(base.clone(), below).await, Ok("tt0111161".into()));
     assert_eq!(at(JobSpec { lead_only: true, ..base }, below).await, Err(skip("template not found")));
 }
+
+#[tokio::test]
+async fn dates_fall_back_to_wikibase_parser() {
+    use crate::test_support::mock;
+    let (server, clients) = world().await;
+    mock(
+        &server,
+        "ids=P569&",
+        serde_json::json!({"entities": {"P569": {"id": "P569", "datatype": "time", "claims": {}}}}),
+    )
+    .await;
+    mock(
+        &server,
+        "values=12+Bealtaine+1950",
+        serde_json::json!({"results": [{"raw": "12 Bealtaine 1950",
+        "value": {"time": "+1950-05-12T00:00:00Z", "precision": 11}, "type": "time"}]}),
+    )
+    .await;
+    let spec = JobSpec {
+        property: Some(PropertyId(569)),
+        template: "X".into(),
+        parameters: vec!["born".into()],
+        ..Default::default()
+    };
+    let job = Job::prepare(&clients, spec).await.unwrap();
+    let eval = |text: &'static str| {
+        let (job, clients) = (&job, &clients);
+        async move { evaluate(job, clients, &page(Some(1)), &revision(text)).await.result.map(|e| e.value.display()) }
+    };
+    assert_eq!(eval("{{X|born=12 Bealtaine 1950}}").await, Ok("1950-05-12".into()));
+    assert_eq!(eval("{{X|born=unknown}}").await, Err(error("could not find a date")));
+    assert_eq!(eval("{{X|born=c. 1950}}").await, Err(error("imprecise date")), "our rejections are final");
+}

@@ -1,5 +1,5 @@
 use crate::ids::{ItemId, PropertyId};
-use crate::value::{Datatype, Value};
+use crate::value::{Datatype, Date, Value, existing_date};
 use crate::wiki::MwApi;
 use crate::wiki::api::params;
 use anyhow::Result;
@@ -86,6 +86,18 @@ impl Wikidata {
             }
         }
         Ok(out)
+    }
+
+    /// A date via Wikibase's own parser (`wbparsevalue`), which knows MediaWiki's
+    /// month names in every language (#56). `None` if it cannot parse the text,
+    /// or only to decade or century precision.
+    pub async fn parse_time(&self, text: &str, lang: &str) -> Result<Option<Date>> {
+        let options = serde_json::json!({ "lang": lang }).to_string();
+        let p = params(&[("action", "wbparsevalue"), ("datatype", "time"), ("values", text), ("options", &options)]);
+        let json = self.api.get(HOST, &p).await?;
+        let value = &json["results"][0]["value"];
+        let precise_enough = value["precision"].as_u64().is_some_and(|p| p >= 9);
+        Ok(existing_date(value).filter(|d| precise_enough && d.year > 0))
     }
 
     /// English labels, falling back to the id.
