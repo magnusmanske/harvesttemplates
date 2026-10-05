@@ -1,1 +1,3 @@
-cognitive-complexity-threshold = 15
+# The lint counts async state machines and expanded `tracing` macros, so a
+# four-line async fn with two log calls scores ~17. 25 still flags real tangles.
+cognitive-complexity-threshold = 25

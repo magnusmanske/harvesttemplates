@@ -1,6 +1,8 @@
 use crate::auth::{FileSessionStore, OAuth};
 use crate::config::Config;
-use crate::wiki::{ApiSource, MwApi, PageSource, Replicas, WithFallback};
+use crate::harvest::ActiveRuns;
+use crate::storage::Store;
+use crate::wiki::{ApiSource, Limits, MwApi, PageSource, Replicas, WithFallback};
 use crate::wikidata::{Wdqs, Wikidata, wdqs};
 use anyhow::{Context, Result};
 use std::sync::Arc;
@@ -52,6 +54,8 @@ pub struct AppState {
     pub pages: Arc<dyn PageSource>,
     pub oauth: OAuth,
     pub sessions: FileSessionStore,
+    pub store: Store,
+    pub runs: Arc<ActiveRuns>,
 }
 
 impl AppState {
@@ -68,7 +72,10 @@ impl AppState {
         let session_dir = &config.server.session_dir;
         let sessions = FileSessionStore::new(session_dir.clone())
             .with_context(|| format!("cannot create session directory {}", session_dir.display()))?;
+        let store = Store::new(config.tool_db.url.expose(), config.tool_db.max_connections)?;
         Ok(Self {
+            store,
+            runs: Arc::default(),
             clients,
             wikidata_api_url: crate::auth::edit::WIKIDATA_API.to_string(),
             pages: Arc::new(pages),
@@ -76,6 +83,17 @@ impl AppState {
             sessions,
             config,
         })
+    }
+}
+
+impl AppState {
+    pub const fn limits(&self) -> Limits {
+        let h = &self.config.harvest;
+        Limits {
+            max_pages: h.max_candidates,
+            max_depth: h.max_category_depth,
+            max_categories: h.max_categories,
+        }
     }
 }
 
