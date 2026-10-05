@@ -2,12 +2,13 @@
 //! See `config.json.template` for the shape.
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// A string that never shows up in `Debug` output or logs.
-#[derive(Clone, Deserialize, PartialEq, Eq)]
+/// Serialisable because OAuth tokens live in (owner-only) session files.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Secret(String);
 
