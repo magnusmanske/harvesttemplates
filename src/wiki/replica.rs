@@ -20,27 +20,17 @@ pub struct Replicas {
 
 impl std::fmt::Debug for Replicas {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Replicas")
-            .field("config", &self.config)
-            .finish_non_exhaustive()
+        f.debug_struct("Replicas").field("config", &self.config).finish_non_exhaustive()
     }
 }
 
 impl Replicas {
     pub fn new(config: ReplicaConfig, user: DbUser) -> Self {
-        Self {
-            config,
-            user,
-            pools: DashMap::new(),
-        }
+        Self { config, user, pools: DashMap::new() }
     }
 
     async fn conn(&self, dbname: &str) -> Result<Conn> {
-        let pool = self
-            .pools
-            .entry(dbname.to_string())
-            .or_insert_with(|| self.new_pool(dbname))
-            .clone();
+        let pool = self.pools.entry(dbname.to_string()).or_insert_with(|| self.new_pool(dbname)).clone();
         tokio::time::timeout(CONNECT_TIMEOUT, pool.get_conn())
             .await
             .with_context(|| format!("timeout connecting to the {dbname} replica"))?
@@ -62,9 +52,7 @@ impl Replicas {
             .db_name(Some(format!("{dbname}_p")))
             .setup(vec!["SET SESSION max_statement_time = 300"])
             .pool_opts(
-                PoolOpts::default()
-                    .with_constraints(constraints)
-                    .with_inactive_connection_ttl(Duration::from_secs(30)),
+                PoolOpts::default().with_constraints(constraints).with_inactive_connection_ttl(Duration::from_secs(30)),
             );
         Pool::new(opts)
     }
@@ -88,14 +76,10 @@ const CATEGORY_SQL: &str = "SELECT page_id, page_namespace, page_title
 impl PageSource for Replicas {
     async fn transclusions(&self, site: &Site, template: &str, namespace: i32, limits: Limits) -> Result<Vec<Page>> {
         let mut conn = self.conn(&site.dbname).await?;
-        let rows: Vec<(u64, Vec<u8>, u64, Option<Vec<u8>>)> = conn
-            .exec(TRANSCLUSIONS_SQL, (template, namespace, limits.max_pages + 1))
-            .await?;
+        let rows: Vec<(u64, Vec<u8>, u64, Option<Vec<u8>>)> =
+            conn.exec(TRANSCLUSIONS_SQL, (template, namespace, limits.max_pages + 1)).await?;
         if rows.len() > limits.max_pages {
-            bail!(
-                "the template is used on more than {} pages; add a category filter",
-                limits.max_pages
-            );
+            bail!("the template is used on more than {} pages; add a category filter", limits.max_pages);
         }
         let mut pages: Vec<Page> = rows
             .into_iter()
@@ -137,11 +121,7 @@ mod tests {
     use crate::config::Config;
     use crate::wiki::{ApiSource, MwApi, Site};
 
-    const LIMITS: Limits = Limits {
-        max_pages: 200_000,
-        max_depth: 5,
-        max_categories: 1000,
-    };
+    const LIMITS: Limits = Limits { max_pages: 200_000, max_depth: 5, max_categories: 1000 };
 
     /// Needs `config.json` with a replica override (SSH tunnel) for enwiki.
     #[tokio::test]
@@ -158,12 +138,7 @@ mod tests {
         let from_api = api.transclusions(&site, &template, 0, LIMITS).await.unwrap();
         assert!(!from_db.is_empty());
         let diff = from_db.len().abs_diff(from_api.len());
-        assert!(
-            diff * 100 < from_db.len(),
-            "db {} vs api {}",
-            from_db.len(),
-            from_api.len()
-        );
+        assert!(diff * 100 < from_db.len(), "db {} vs api {}", from_db.len(), from_api.len());
         assert!(from_db.iter().filter(|p| p.item.is_some()).count() * 2 > from_db.len());
 
         let category = site.db_key(14, "Category:Airports in Berlin");

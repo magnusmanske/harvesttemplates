@@ -29,18 +29,10 @@ pub async fn revisions(api: &MwApi, site: &Site, page_ids: &[u64]) -> Result<Has
         let json = api.get(&site.host, &p).await?;
         for page in json["query"]["pages"].as_array().into_iter().flatten() {
             let rev = &page["revisions"][0];
-            if let (Some(page_id), Some(id), Some(text)) = (
-                page["pageid"].as_u64(),
-                rev["revid"].as_u64(),
-                rev["slots"]["main"]["content"].as_str(),
-            ) {
-                out.insert(
-                    page_id,
-                    Revision {
-                        id,
-                        text: text.to_string(),
-                    },
-                );
+            if let (Some(page_id), Some(id), Some(text)) =
+                (page["pageid"].as_u64(), rev["revid"].as_u64(), rev["slots"]["main"]["content"].as_str())
+            {
+                out.insert(page_id, Revision { id, text: text.to_string() });
             }
         }
     }
@@ -69,12 +61,10 @@ pub async fn link_target(api: &MwApi, site: &Site, title: &str) -> Result<LinkTa
     if page.is_null() || page.get("missing").is_some() || page.get("invalid").is_some() {
         return Ok(LinkTarget::Missing);
     }
-    Ok(
-        match page["pageprops"]["wikibase_item"].as_str().and_then(|q| q.parse().ok()) {
-            Some(item) => LinkTarget::Item(item),
-            None => LinkTarget::NoItem,
-        },
-    )
+    Ok(match page["pageprops"]["wikibase_item"].as_str().and_then(|q| q.parse().ok()) {
+        Some(item) => LinkTarget::Item(item),
+        None => LinkTarget::NoItem,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,16 +77,9 @@ pub enum FileLocation {
 
 pub async fn file_location(api: &MwApi, site: &Site, name: &str) -> Result<FileLocation> {
     let title = site.full_title(NS_FILE, name);
-    let p = params(&[
-        ("action", "query"),
-        ("titles", &title),
-        ("prop", "imageinfo"),
-        ("iiprop", ""),
-    ]);
+    let p = params(&[("action", "query"), ("titles", &title), ("prop", "imageinfo"), ("iiprop", "")]);
     let json = api.get(&site.host, &p).await?;
-    let repository = json["query"]["pages"][0]["imagerepository"]
-        .as_str()
-        .unwrap_or_default();
+    let repository = json["query"]["pages"][0]["imagerepository"].as_str().unwrap_or_default();
     Ok(match repository {
         "shared" => FileLocation::Commons,
         "local" if site.host == "commons.wikimedia.org" => FileLocation::Commons,

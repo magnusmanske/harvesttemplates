@@ -15,27 +15,18 @@ pub struct Source {
 impl Source {
     pub fn new(wiki: Option<ItemId>, host: &str, title: &str, revision: u64) -> Self {
         let title = urlencoding::encode(&title.replace(' ', "_")).into_owned();
-        Self {
-            wiki,
-            permalink: format!("https://{host}/w/index.php?title={title}&oldid={revision}"),
-        }
+        Self { wiki, permalink: format!("https://{host}/w/index.php?title={title}&oldid={revision}") }
     }
 
     fn reference(&self) -> Json {
         let mut snaks = serde_json::Map::new();
         let mut order = vec![];
         if let Some(wiki) = self.wiki {
-            snaks.insert(
-                IMPORTED_FROM.to_string(),
-                json!([snak(IMPORTED_FROM, Datatype::Item, &Value::Item(wiki))]),
-            );
+            snaks.insert(IMPORTED_FROM.to_string(), json!([snak(IMPORTED_FROM, Datatype::Item, &Value::Item(wiki))]));
             order.push(IMPORTED_FROM.to_string());
         }
         let url = Value::String(self.permalink.clone());
-        snaks.insert(
-            WIKIMEDIA_IMPORT_URL.to_string(),
-            json!([snak(WIKIMEDIA_IMPORT_URL, Datatype::Url, &url)]),
-        );
+        snaks.insert(WIKIMEDIA_IMPORT_URL.to_string(), json!([snak(WIKIMEDIA_IMPORT_URL, Datatype::Url, &url)]));
         order.push(WIKIMEDIA_IMPORT_URL.to_string());
         json!({ "snaks": snaks, "snaks-order": order })
     }
@@ -67,12 +58,7 @@ mod tests {
     #[test]
     fn statement_with_reference() {
         let source = Source::new(Some(ItemId(328)), "en.wikipedia.org", "The Shawshank Redemption", 123);
-        let s = statement(
-            PropertyId(345),
-            Datatype::ExternalId,
-            &Value::String("tt0111161".into()),
-            &source,
-        );
+        let s = statement(PropertyId(345), Datatype::ExternalId, &Value::String("tt0111161".into()), &source);
         assert_eq!(s["mainsnak"]["property"], "P345");
         assert_eq!(s["mainsnak"]["datatype"], "external-id");
         assert_eq!(s["mainsnak"]["datavalue"]["value"], "tt0111161");

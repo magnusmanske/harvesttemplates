@@ -19,29 +19,18 @@ pub struct Clients {
 impl Clients {
     pub fn new(http: &reqwest::Client) -> Self {
         let mw = MwApi::new(http.clone());
-        Self {
-            wikidata: Wikidata { api: mw.clone() },
-            wdqs: Wdqs::new(http.clone(), wdqs::ENDPOINT),
-            mw,
-        }
+        Self { wikidata: Wikidata { api: mw.clone() }, wdqs: Wdqs::new(http.clone(), wdqs::ENDPOINT), mw }
     }
 
     /// Everything pointed at one mock server.
     pub fn mocked(url: &str) -> Self {
         let http = reqwest::Client::new();
         let mw = MwApi::with_base_url(http.clone(), url.to_string());
-        Self {
-            wikidata: Wikidata { api: mw.clone() },
-            wdqs: Wdqs::new(http, url),
-            mw,
-        }
+        Self { wikidata: Wikidata { api: mw.clone() }, wdqs: Wdqs::new(http, url), mw }
     }
 
     pub const fn services(&self) -> crate::constraints::Services<'_> {
-        crate::constraints::Services {
-            wdqs: &self.wdqs,
-            mw: &self.mw,
-        }
+        crate::constraints::Services { wdqs: &self.wdqs, mw: &self.mw }
     }
 }
 
@@ -63,13 +52,8 @@ impl AppState {
     pub fn new(config: Config) -> Result<Self> {
         let http = http_client(&config.user_agent)?;
         let clients = Clients::new(&http);
-        let fallback = ApiSource {
-            api: clients.mw.clone(),
-        };
-        let pages = WithFallback {
-            primary: Replicas::new(config.replicas.clone(), config.db_user.clone()),
-            fallback,
-        };
+        let fallback = ApiSource { api: clients.mw.clone() };
+        let pages = WithFallback { primary: Replicas::new(config.replicas.clone(), config.db_user.clone()), fallback };
         let session_dir = &config.server.session_dir;
         let sessions = FileSessionStore::new(session_dir.clone())
             .with_context(|| format!("cannot create session directory {}", session_dir.display()))?;
@@ -91,11 +75,7 @@ impl AppState {
 impl AppState {
     pub const fn limits(&self) -> Limits {
         let h = &self.config.harvest;
-        Limits {
-            max_pages: h.max_candidates,
-            max_depth: h.max_category_depth,
-            max_categories: h.max_categories,
-        }
+        Limits { max_pages: h.max_candidates, max_depth: h.max_category_depth, max_categories: h.max_categories }
     }
 }
 

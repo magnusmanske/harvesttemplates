@@ -42,9 +42,7 @@ impl Job {
         check_value_source(&spec)?;
         let transform = Transform::new(spec.transform.clone()).map_err(|e| invalid(format!("invalid regex: {e}")))?;
         let host = host_for(&spec.siteid, &spec.project).map_err(|e| invalid(e.to_string()))?;
-        let mut site = Site::load(&clients.mw, &host)
-            .await
-            .map_err(|_| invalid(format!("cannot reach {host}")))?;
+        let mut site = Site::load(&clients.mw, &host).await.map_err(|_| invalid(format!("cannot reach {host}")))?;
         site.edition = clients.wdqs.edition_for(&site.dbname).await.unwrap_or_else(|e| {
             tracing::warn!("no edition item for {}: {e:#}", site.dbname);
             None
@@ -56,22 +54,10 @@ impl Job {
         let template_key = site.db_key(NS_TEMPLATE, &spec.template);
         let redirects = site.template_redirects(&clients.mw, &template_key).await?;
         let redirects = redirects.ok_or_else(|| invalid(format!("Template:{} does not exist", spec.template)))?;
-        let matcher = site.template_matcher(template_names(
-            &template_key,
-            redirects,
-            spec.template_redirects.as_deref(),
-        ));
+        let matcher =
+            site.template_matcher(template_names(&template_key, redirects, spec.template_redirects.as_deref()));
         let constraints = selected_constraints(&property, spec.constraints.as_deref());
-        Ok(Self {
-            spec,
-            site,
-            property,
-            datatype,
-            template_key,
-            matcher,
-            transform,
-            constraints,
-        })
+        Ok(Self { spec, site, property, datatype, template_key, matcher, transform, constraints })
     }
 }
 
@@ -90,9 +76,8 @@ fn check_property(property: &PropertyInfo, spec: &JobSpec) -> Result<Datatype, J
     if property.deprecated {
         return Err(invalid(format!("{} is deprecated", property.id)));
     }
-    let datatype = property
-        .datatype
-        .ok_or_else(|| invalid(format!("datatype {} is not supported", property.datatype_name)))?;
+    let datatype =
+        property.datatype.ok_or_else(|| invalid(format!("datatype {} is not supported", property.datatype_name)))?;
     match datatype {
         Datatype::Quantity => check_unit(property, spec)?,
         Datatype::Monolingual if !spec.use_page_title || !spec.language.is_empty() => check_language(&spec.language)?,
@@ -126,14 +111,8 @@ fn check_language(code: &str) -> Result<(), JobError> {
     let valid = !code.is_empty()
         && code.len() <= 20
         && code.starts_with(|c: char| c.is_ascii_lowercase())
-        && code
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
-    if valid {
-        Ok(())
-    } else {
-        Err(invalid("choose a valid language code"))
-    }
+        && code.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if valid { Ok(()) } else { Err(invalid("choose a valid language code")) }
 }
 
 /// The template itself plus the accepted redirects (#159).
@@ -183,24 +162,9 @@ mod tests {
 
     #[test]
     fn value_source_required() {
-        let spec = JobSpec {
-            template: "X".into(),
-            ..Default::default()
-        };
+        let spec = JobSpec { template: "X".into(), ..Default::default() };
         assert!(check_value_source(&spec).is_err());
-        assert!(
-            check_value_source(&JobSpec {
-                parameters: vec!["1".into()],
-                ..spec.clone()
-            })
-            .is_ok()
-        );
-        assert!(
-            check_value_source(&JobSpec {
-                use_page_title: true,
-                ..spec
-            })
-            .is_ok()
-        );
+        assert!(check_value_source(&JobSpec { parameters: vec!["1".into()], ..spec.clone() }).is_ok());
+        assert!(check_value_source(&JobSpec { use_page_title: true, ..spec }).is_ok());
     }
 }

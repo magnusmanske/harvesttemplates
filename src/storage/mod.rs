@@ -97,9 +97,7 @@ pub struct Store {
 /// Connection options hold the password, so they stay out of `Debug`.
 impl std::fmt::Debug for Store {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Store")
-            .field("database", &self.opts.db_name())
-            .finish_non_exhaustive()
+        f.debug_struct("Store").field("database", &self.opts.db_name()).finish_non_exhaustive()
     }
 }
 
@@ -119,27 +117,18 @@ impl Store {
     }
 
     pub fn from_url(url: &str, max_connections: usize) -> Result<Self> {
-        Ok(Self::with_opts(
-            Opts::from_url(url).context("invalid database URL")?,
-            max_connections,
-        ))
+        Ok(Self::with_opts(Opts::from_url(url).context("invalid database URL")?, max_connections))
     }
 
     fn with_opts(opts: Opts, max_connections: usize) -> Self {
         let constraints = PoolConstraints::new(0, max_connections.max(1)).unwrap_or_default();
         let pool_opts =
             OptsBuilder::from_opts(opts.clone()).pool_opts(PoolOpts::default().with_constraints(constraints));
-        Self {
-            pool: Pool::new(pool_opts),
-            opts,
-        }
+        Self { pool: Pool::new(pool_opts), opts }
     }
 
     async fn conn(&self) -> Result<Conn> {
-        self.pool
-            .get_conn()
-            .await
-            .context("cannot connect to the tool database")
+        self.pool.get_conn().await.context("cannot connect to the tool database")
     }
 
     /// Create the database if needed (Toolforge users may create `<user>__…`), then the tables.
@@ -158,11 +147,8 @@ impl Store {
             anyhow::bail!("invalid database name '{name}'");
         }
         let opts = OptsBuilder::from_opts(self.opts.clone()).db_name(None::<String>);
-        let mut conn = Conn::new(opts)
-            .await
-            .context("cannot connect to the tool database server")?;
-        conn.query_drop(format!("CREATE DATABASE IF NOT EXISTS `{name}`"))
-            .await?;
+        let mut conn = Conn::new(opts).await.context("cannot connect to the tool database server")?;
+        conn.query_drop(format!("CREATE DATABASE IF NOT EXISTS `{name}`")).await?;
         conn.disconnect().await?;
         Ok(())
     }
@@ -180,20 +166,11 @@ impl Store {
     // ---------- Runs ----------
 
     pub async fn create_run(&self, owner: &Owner, spec: &JobSpec, share_id: Option<u64>) -> Result<u64> {
-        let editgroup: String = (0..12)
-            .map(|_| char::from(b"0123456789abcdef"[rand::random_range(0..16)]))
-            .collect();
+        let editgroup: String = (0..12).map(|_| char::from(b"0123456789abcdef"[rand::random_range(0..16)])).collect();
         let sql = "INSERT INTO run (user_id, user_name, share_id, spec, status, editgroup, created)
                    VALUES (?, ?, ?, ?, 'loading', ?, ?)";
         let mut conn = self.conn().await?;
-        let params = (
-            owner.id,
-            &owner.name,
-            share_id,
-            serde_json::to_string(spec)?,
-            editgroup,
-            now(),
-        );
+        let params = (owner.id, &owner.name, share_id, serde_json::to_string(spec)?, editgroup, now());
         conn.exec_drop(sql, params).await?;
         conn.last_insert_id().context("no run id")
     }
@@ -205,10 +182,7 @@ impl Store {
                    WHERE id = ?";
         let started = matches!(status, RunStatus::Previewing | RunStatus::Editing);
         let finished = matches!(status, RunStatus::Done | RunStatus::Failed);
-        self.conn()
-            .await?
-            .exec_drop(sql, (status.as_str(), message, started, finished, id))
-            .await?;
+        self.conn().await?.exec_drop(sql, (status.as_str(), message, started, finished, id)).await?;
         Ok(())
     }
 
@@ -227,13 +201,7 @@ impl Store {
             for (i, page) in chunk.iter().enumerate() {
                 let seq = (chunk_no * INSERT_CHUNK + i) as u32;
                 let item = page.item.map(|q| q.to_string());
-                values.extend([
-                    id.into(),
-                    seq.into(),
-                    page.id.into(),
-                    page.title.clone().into(),
-                    item.into(),
-                ]);
+                values.extend([id.into(), seq.into(), page.id.into(), page.title.clone().into(), item.into()]);
             }
             conn.exec_drop(sql, values).await?;
         }
@@ -275,11 +243,7 @@ impl Store {
             "SELECT {ROW_COLUMNS} FROM run_row WHERE run_id = ? AND (? IS NULL OR status = ?) ORDER BY seq LIMIT ? OFFSET ?"
         );
         let status = status.map(RowStatus::as_str);
-        let rows: Vec<Row> = self
-            .conn()
-            .await?
-            .exec(sql, (id, status, status, limit, offset))
-            .await?;
+        let rows: Vec<Row> = self.conn().await?.exec(sql, (id, status, status, limit, offset)).await?;
         rows.into_iter().map(row_from_row).collect()
     }
 
@@ -316,8 +280,7 @@ impl Store {
     pub async fn create_share(&self, owner: &Owner, title: &str, spec: &JobSpec) -> Result<u64> {
         let sql = "INSERT INTO share (user_id, user_name, title, spec, created) VALUES (?, ?, ?, ?, ?)";
         let mut conn = self.conn().await?;
-        conn.exec_drop(sql, (owner.id, &owner.name, title, serde_json::to_string(spec)?, now()))
-            .await?;
+        conn.exec_drop(sql, (owner.id, &owner.name, title, serde_json::to_string(spec)?, now())).await?;
         conn.last_insert_id().context("no share id")
     }
 
@@ -336,8 +299,7 @@ impl Store {
     /// Only the owner can delete. Returns whether a share was deleted.
     pub async fn delete_share(&self, id: u64, user_id: u64) -> Result<bool> {
         let mut conn = self.conn().await?;
-        conn.exec_drop("DELETE FROM share WHERE id = ? AND user_id = ?", (id, user_id))
-            .await?;
+        conn.exec_drop("DELETE FROM share WHERE id = ? AND user_id = ?", (id, user_id)).await?;
         Ok(conn.affected_rows() > 0)
     }
 
@@ -359,12 +321,7 @@ const SHARE_COLUMNS: &str =
 /// Statements of an SQL script, without `--` comment lines.
 fn sql_statements(script: &str) -> Vec<String> {
     let code: Vec<&str> = script.lines().filter(|l| !l.trim_start().starts_with("--")).collect();
-    code.join("\n")
-        .split(';')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .collect()
+    code.join("\n").split(';').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect()
 }
 
 fn take<T: FromValue>(row: &mut Row, column: &str) -> Result<T> {

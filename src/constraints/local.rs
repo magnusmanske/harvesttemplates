@@ -92,9 +92,7 @@ pub fn integer(_: &ConstraintDef, c: &Candidate) -> bool {
     let Value::Quantity { amount, .. } = c.value else {
         return false;
     };
-    amount
-        .split_once('.')
-        .is_some_and(|(_, fraction)| !fraction.trim_end_matches('0').is_empty())
+    amount.split_once('.').is_some_and(|(_, fraction)| !fraction.trim_end_matches('0').is_empty())
 }
 
 pub fn item_requires_statement(def: &ConstraintDef, c: &Candidate) -> bool {
@@ -115,10 +113,7 @@ pub fn has_statement(c: &Candidate, property: PropertyId, values: &[ItemId]) -> 
 
 pub fn mandatory_qualifier(def: &ConstraintDef, c: &Candidate) -> bool {
     let required = def.entity_ids(PROPERTY);
-    required
-        .iter()
-        .filter_map(|p| p.parse().ok())
-        .any(|p| !c.qualifiers.contains(&p))
+    required.iter().filter_map(|p| p.parse().ok()).any(|p| !c.qualifiers.contains(&p))
 }
 
 /// We never add bounds.
@@ -157,10 +152,7 @@ pub fn range(def: &ConstraintDef, c: &Candidate) -> bool {
 
 /// The value of a bound qualifier; `None` for "no value" (unbounded).
 fn bound(def: &ConstraintDef, property: PropertyId) -> Option<&Json> {
-    def.snaks(property)
-        .first()
-        .filter(|s| s["snaktype"] == "value")
-        .map(|s| &s["datavalue"]["value"])
+    def.snaks(property).first().filter(|s| s["snaktype"] == "value").map(|s| &s["datavalue"]["value"])
 }
 
 /// "Unknown value" as a date bound means "now".
@@ -169,11 +161,7 @@ fn date_bound(def: &ConstraintDef, property: PropertyId) -> Option<Date> {
     if snak["snaktype"] == "somevalue" {
         let today = chrono::Utc::now().date_naive();
         use chrono::Datelike;
-        return Some(Date {
-            year: today.year().into(),
-            month: today.month() as u8,
-            day: today.day() as u8,
-        });
+        return Some(Date { year: today.year().into(), month: today.month() as u8, day: today.day() as u8 });
     }
     existing_date(bound(def, property)?).map(|d| d.earliest())
 }
@@ -185,12 +173,7 @@ pub fn single_value(_: &ConstraintDef, c: &Candidate) -> bool {
 /// Adding a normal-rank value next to existing normal-rank ones (and no
 /// preferred one) leaves several best values.
 pub fn single_best_value(_: &ConstraintDef, c: &Candidate) -> bool {
-    let ranks: Vec<&str> = c
-        .item
-        .statements(c.property)
-        .iter()
-        .filter_map(|s| s["rank"].as_str())
-        .collect();
+    let ranks: Vec<&str> = c.item.statements(c.property).iter().filter_map(|s| s["rank"].as_str()).collect();
     ranks.contains(&"normal") && !ranks.contains(&"preferred")
 }
 
@@ -210,9 +193,7 @@ mod tests {
     }
 
     fn item_snaks(ids: &[&str]) -> Json {
-        ids.iter()
-            .map(|id| json!({"snaktype": "value", "datavalue": {"value": {"id": id}}}))
-            .collect()
+        ids.iter().map(|id| json!({"snaktype": "value", "datavalue": {"value": {"id": id}}})).collect()
     }
 
     fn string_snak(s: &str) -> Json {
@@ -227,13 +208,7 @@ mod tests {
             Value::Item(_) => Datatype::Item,
             _ => Datatype::String,
         };
-        let c = Candidate {
-            item: &entity,
-            property: PropertyId(1),
-            datatype,
-            value: &value,
-            qualifiers: &[],
-        };
+        let c = Candidate { item: &entity, property: PropertyId(1), datatype, value: &value, qualifiers: &[] };
         f(d, &c)
     }
 
@@ -246,20 +221,11 @@ mod tests {
         let d = def("Q21502404", json!({"P1793": string_snak(r"tt\d{7,8}")}));
         let empty = item(json!({}));
         assert!(!check(format, &d, &empty, Value::String("tt0111161".into())));
-        assert!(
-            check(format, &d, &empty, Value::String("tt0111161x".into())),
-            "anchored"
-        );
+        assert!(check(format, &d, &empty, Value::String("tt0111161x".into())), "anchored");
         let d = def("Q21502404", json!({"P1793": string_snak(r"(?i)[a-z]+(?=\d)\d")}));
-        assert!(
-            !check(format, &d, &empty, Value::String("AB1".into())),
-            "flags and lookahead (#161)"
-        );
+        assert!(!check(format, &d, &empty, Value::String("AB1".into())), "flags and lookahead (#161)");
         let d = def("Q21502404", json!({"P1793": string_snak(r"(unclosed")}));
-        assert!(
-            !check(format, &d, &empty, Value::String("x".into())),
-            "broken patterns don't block"
-        );
+        assert!(!check(format, &d, &empty, Value::String("x".into())), "broken patterns don't block");
     }
 
     #[test]
@@ -276,14 +242,8 @@ mod tests {
         let novalue = json!({"snaktype": "novalue"});
         let d = def("Q21514353", json!({"P2305": [novalue]}));
         let empty = item(json!({}));
-        let qty = |amount: &str, unit| Value::Quantity {
-            amount: amount.into(),
-            unit,
-        };
-        assert!(
-            !check(allowed_units, &d, &empty, qty("+62", None)),
-            "#178: no unit allowed"
-        );
+        let qty = |amount: &str, unit| Value::Quantity { amount: amount.into(), unit };
+        assert!(!check(allowed_units, &d, &empty, qty("+62", None)), "#178: no unit allowed");
         assert!(check(allowed_units, &d, &empty, qty("+62", Some(ItemId(11_573)))));
         assert!(!check(integer, &d, &empty, qty("+62.000", None)));
         assert!(check(integer, &d, &empty, qty("+62.5", None)));
@@ -294,21 +254,12 @@ mod tests {
         let amount = |a: &str| json!([{"snaktype": "value", "datavalue": {"value": {"amount": a}}}]);
         let d = def("Q21510860", json!({"P2313": amount("+0"), "P2312": amount("+100"), }));
         let empty = item(json!({}));
-        let qty = |a: &str| Value::Quantity {
-            amount: a.into(),
-            unit: None,
-        };
+        let qty = |a: &str| Value::Quantity { amount: a.into(), unit: None };
         assert!(!check(range, &d, &empty, qty("+50")));
         assert!(check(range, &d, &empty, qty("-1")));
         let time = |t: &str| json!([{"snaktype": "value", "datavalue": {"value": {"time": t, "precision": 9}}}]);
-        let d = def(
-            "Q21510860",
-            json!({"P2310": time("+1800-00-00T00:00:00Z"), "P2311": [{"snaktype": "somevalue"}]}),
-        );
-        let date = |year| Value::Time {
-            date: Date { year, month: 0, day: 0 },
-            calendar: Calendar::Gregorian,
-        };
+        let d = def("Q21510860", json!({"P2310": time("+1800-00-00T00:00:00Z"), "P2311": [{"snaktype": "somevalue"}]}));
+        let date = |year| Value::Time { date: Date { year, month: 0, day: 0 }, calendar: Calendar::Gregorian };
         assert!(!check(range, &d, &empty, date(1950)));
         assert!(check(range, &d, &empty, date(1700)));
         assert!(check(range, &d, &empty, date(3000)), "unknown max means now");
@@ -329,10 +280,7 @@ mod tests {
 
     #[test]
     fn item_requires_statements() {
-        let d = def(
-            "Q21503247",
-            json!({"P2306": item_snaks(&["P31"]), "P2305": item_snaks(&["Q5"])}),
-        );
+        let d = def("Q21503247", json!({"P2306": item_snaks(&["P31"]), "P2305": item_snaks(&["Q5"])}));
         let human = item(json!({"P31": [{"rank": "normal", "mainsnak": {"datavalue": {"value": {"id": "Q5"}}}}]}));
         let cat = item(json!({"P31": [{"rank": "normal", "mainsnak": {"datavalue": {"value": {"id": "Q146"}}}}]}));
         assert!(!check(item_requires_statement, &d, &human, Value::String("x".into())));

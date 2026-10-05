@@ -44,10 +44,9 @@ impl Remote {
                 Some(inverse) => Ok(!s.wdqs.ask(&format!("ASK {{ wd:{v} wdt:{inverse} wd:{q} }}")).await?),
                 None => Ok(false),
             },
-            (Self::Symmetric, Some(v)) => Ok(!s
-                .wdqs
-                .ask(&format!("ASK {{ wd:{v} wdt:{} wd:{q} }}", c.property))
-                .await?),
+            (Self::Symmetric, Some(v)) => {
+                Ok(!s.wdqs.ask(&format!("ASK {{ wd:{v} wdt:{} wd:{q} }}", c.property)).await?)
+            }
             (Self::Type, _) => {
                 let direct = c.item.item_values(INSTANCE_OF);
                 if relation(def) != "wdt:P279" && def.items(CLASS).iter().any(|class| direct.contains(class)) {
@@ -91,11 +90,8 @@ async fn in_class(subject: &str, def: &ConstraintDef, s: Services<'_>) -> Result
     if classes.is_empty() {
         return Ok(true);
     }
-    let sparql = format!(
-        "ASK {{ VALUES ?class {{ {} }} {subject} {}/wdt:P279* ?class }}",
-        classes.join(" "),
-        relation(def)
-    );
+    let sparql =
+        format!("ASK {{ VALUES ?class {{ {} }} {subject} {}/wdt:P279* ?class }}", classes.join(" "), relation(def));
     s.wdqs.ask(&sparql).await
 }
 
@@ -105,11 +101,7 @@ async fn commons_link(def: &ConstraintDef, c: &Candidate<'_>, s: Services<'_>) -
         return Ok(false);
     };
     let namespace = def.first_string(NAMESPACE).unwrap_or_default();
-    let title = if namespace.is_empty() {
-        name.clone()
-    } else {
-        format!("{namespace}:{name}")
-    };
+    let title = if namespace.is_empty() { name.clone() } else { format!("{namespace}:{name}") };
     let p = params(&[("action", "query"), ("titles", &title), ("redirects", "1")]);
     let json = s.mw.get(COMMONS, &p).await?;
     let page = &json["query"]["pages"][0];
@@ -150,22 +142,10 @@ async fn distinct(c: &Candidate<'_>, s: Services<'_>) -> Result<bool> {
             return Ok(false);
         };
         let p = c.property;
-        return s
-            .wdqs
-            .ask(&format!(
-                "ASK {{ ?item p:{p}/ps:{p} {term} . FILTER(?item != wd:{}) }}",
-                c.item.id
-            ))
-            .await;
+        return s.wdqs.ask(&format!("ASK {{ ?item p:{p}/ps:{p} {term} . FILTER(?item != wd:{}) }}", c.item.id)).await;
     };
     let query = format!("haswbstatement:{}={key}", c.property);
-    let p = params(&[
-        ("action", "query"),
-        ("list", "search"),
-        ("srsearch", &query),
-        ("srlimit", "5"),
-        ("srprop", ""),
-    ]);
+    let p = params(&[("action", "query"), ("list", "search"), ("srsearch", &query), ("srlimit", "5"), ("srprop", "")]);
     let json = s.mw.get(HOST, &p).await?;
     let own = c.item.id.to_string();
     let hits = json["query"]["search"].as_array().into_iter().flatten();
@@ -203,10 +183,7 @@ mod tests {
             .mount(&server)
             .await;
         let http = reqwest::Client::new();
-        let (mw, wdqs) = (
-            MwApi::with_base_url(http.clone(), server.uri()),
-            Wdqs::new(http, &server.uri()),
-        );
+        let (mw, wdqs) = (MwApi::with_base_url(http.clone(), server.uri()), Wdqs::new(http, &server.uri()));
         let s = Services { wdqs: &wdqs, mw: &mw };
         let item = Entity::new(json!({"id": "Q1", "claims": {}})).unwrap();
         for (value, expected) in [("tt1", false), ("tt2", true)] {
@@ -218,10 +195,7 @@ mod tests {
                 value: &value,
                 qualifiers: &[],
             };
-            assert_eq!(
-                Remote::Distinct.violated(&def(json!({})), &c, s).await.unwrap(),
-                expected
-            );
+            assert_eq!(Remote::Distinct.violated(&def(json!({})), &c, s).await.unwrap(), expected);
         }
     }
 
@@ -240,10 +214,7 @@ mod tests {
         let http =
             crate::app_state::http_client("HarvestTemplates tests (https://github.com/magnusmanske/harvesttemplates)")
                 .unwrap();
-        let (mw, wdqs) = (
-            MwApi::new(http.clone()),
-            Wdqs::new(http, crate::wikidata::wdqs::ENDPOINT),
-        );
+        let (mw, wdqs) = (MwApi::new(http.clone()), Wdqs::new(http, crate::wikidata::wdqs::ENDPOINT));
         let s = Services { wdqs: &wdqs, mw: &mw };
         let item = |c| Entity::new(json!({"id": "Q42", "claims": c})).unwrap();
         let human = def(json!({"P2308": [{"snaktype": "value", "datavalue": {"value": {"id": "Q5"}}}]}));
@@ -257,24 +228,10 @@ mod tests {
             value: &value,
             qualifiers: &[],
         };
-        assert!(
-            !Remote::Type.violated(&human, &c(&no_p31), s).await.unwrap(),
-            "Q42 is a human (via WDQS)"
-        );
+        assert!(!Remote::Type.violated(&human, &c(&no_p31), s).await.unwrap(), "Q42 is a human (via WDQS)");
         assert!(Remote::Type.violated(&film, &c(&no_p31), s).await.unwrap());
-        assert!(
-            !Remote::ConflictsWith
-                .violated(&def(json!({})), &c(&no_p31), s)
-                .await
-                .unwrap()
-        );
-        assert!(
-            !Remote::Distinct
-                .violated(&def(json!({})), &c(&no_p31), s)
-                .await
-                .unwrap(),
-            "only Q42 has it"
-        );
+        assert!(!Remote::ConflictsWith.violated(&def(json!({})), &c(&no_p31), s).await.unwrap());
+        assert!(!Remote::Distinct.violated(&def(json!({})), &c(&no_p31), s).await.unwrap(), "only Q42 has it");
         let other = Value::String("nm0000001".into());
         let c2 = Candidate {
             item: &no_p31,
@@ -283,10 +240,7 @@ mod tests {
             value: &other,
             qualifiers: &[],
         };
-        assert!(
-            Remote::Distinct.violated(&def(json!({})), &c2, s).await.unwrap(),
-            "Fred Astaire has nm0000001"
-        );
+        assert!(Remote::Distinct.violated(&def(json!({})), &c2, s).await.unwrap(), "Fred Astaire has nm0000001");
         let file = Value::String("Douglas adams portrait cropped.jpg".into());
         let c3 = Candidate {
             item: &no_p31,

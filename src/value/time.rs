@@ -114,10 +114,7 @@ impl DateLimit {
 
 /// Parse a free-text date. `lang` selects month names (the wiki's content language).
 pub fn parse_date(raw: &str, lang: &str, calendar: Calendar) -> Result<Date, ValueError> {
-    let text = to_ascii_digits(raw)
-        .replace(['–', '—', '‐'], "-")
-        .replace("[[", "")
-        .replace("]]", "");
+    let text = to_ascii_digits(raw).replace(['–', '—', '‐'], "-").replace("[[", "").replace("]]", "");
     if IMPRECISE.is_match(&text) {
         return Err(ValueError::ImpreciseDate);
     }
@@ -145,10 +142,7 @@ pub fn parse_date_parts(
         Some(m) => month_number(&to_ascii_digits(m), months).ok_or(ValueError::InvalidDate)?,
         None => 0,
     };
-    let day = match day
-        .map(|d| to_ascii_digits(d).trim().to_string())
-        .filter(|d| !d.is_empty())
-    {
+    let day = match day.map(|d| to_ascii_digits(d).trim().to_string()).filter(|d| !d.is_empty()) {
         Some(d) => d.parse().map_err(|_| ValueError::InvalidDate)?,
         None => 0,
     };
@@ -214,10 +208,7 @@ static IMPRECISE: LazyLock<Regex> =
 static BARE_YEAR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9]{1,4}$").unwrap());
 static FOUR_DIGITS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?-u:\b)[0-9]{4}(?-u:\b)").unwrap());
 static ISO: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(&format!(
-        r"(?-u:\b)(?P<y>[0-9]{{3,4}})-(?P<m>[0-9]{{1,2}})-(?P<d>[0-9]{{1,2}}){YEAR_END}"
-    ))
-    .unwrap()
+    Regex::new(&format!(r"(?-u:\b)(?P<y>[0-9]{{3,4}})-(?P<m>[0-9]{{1,2}})-(?P<d>[0-9]{{1,2}}){YEAR_END}")).unwrap()
 });
 static NUMERIC_YMD: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(
@@ -261,11 +252,7 @@ impl LangPatterns {
         let months = with_abbreviations(names);
         let mut alternatives: Vec<&String> = months.keys().collect();
         alternatives.sort_by_key(|n| std::cmp::Reverse(n.chars().count()));
-        let m = alternatives
-            .iter()
-            .map(|n| regex::escape(n))
-            .collect::<Vec<_>>()
-            .join("|");
+        let m = alternatives.iter().map(|n| regex::escape(n)).collect::<Vec<_>>().join("|");
         let (d, y) = (r"(?-u:\b)(?P<d>[0-9]{1,2})", format!(r"(?P<y>[0-9]{{3,4}}){YEAR_END}"));
         let compile = |p: String| Regex::new(&format!("(?i){p}")).expect("escaped month names");
         Self {
@@ -391,17 +378,11 @@ mod tests {
 
     #[test]
     fn limits() {
-        let at_least = DateLimit {
-            relation: Relation::AtLeast,
-            date: date(1582, 10, 15),
-        };
+        let at_least = DateLimit { relation: Relation::AtLeast, date: date(1582, 10, 15) };
         assert!(at_least.accepts(&date(1583, 0, 0)));
         assert!(at_least.accepts(&date(1582, 10, 15)));
         assert!(!at_least.accepts(&date(1582, 0, 0)));
-        let before = DateLimit {
-            relation: Relation::Before,
-            date: date(1926, 0, 0),
-        };
+        let before = DateLimit { relation: Relation::Before, date: date(1926, 0, 0) };
         assert!(before.accepts(&date(1925, 0, 0)));
         assert!(!before.accepts(&date(1926, 3, 1)));
     }

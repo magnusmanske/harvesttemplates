@@ -43,10 +43,9 @@ async fn attempt_once(req: RequestBuilder) -> Attempt {
         Ok(resp) if resp.status().is_success() => {
             Attempt::Done(resp.json().await.context("response is not valid JSON"))
         }
-        Ok(resp) if is_transient(resp.status()) => Attempt::Retry(
-            retry_after(&resp),
-            format!("HTTP {} from {}", resp.status(), resp.url()),
-        ),
+        Ok(resp) if is_transient(resp.status()) => {
+            Attempt::Retry(retry_after(&resp), format!("HTTP {} from {}", resp.status(), resp.url()))
+        }
         Ok(resp) => Attempt::Done(Err(anyhow!("HTTP {} from {}", resp.status(), resp.url()))),
         Err(e) if e.is_timeout() || e.is_connect() => Attempt::Retry(None, e.to_string()),
         Err(e) => Attempt::Done(Err(e.into())),
@@ -71,11 +70,7 @@ mod tests {
     #[tokio::test]
     async fn retries_transient_errors() {
         let server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .respond_with(ResponseTemplate::new(503))
-            .up_to_n_times(2)
-            .mount(&server)
-            .await;
+        Mock::given(method("GET")).respond_with(ResponseTemplate::new(503)).up_to_n_times(2).mount(&server).await;
         Mock::given(method("GET"))
             .respond_with(ResponseTemplate::new(200).set_body_string(r#"{"ok":true}"#))
             .mount(&server)
@@ -88,11 +83,7 @@ mod tests {
     #[tokio::test]
     async fn gives_up_on_client_errors() {
         let server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .respond_with(ResponseTemplate::new(404))
-            .expect(1)
-            .mount(&server)
-            .await;
+        Mock::given(method("GET")).respond_with(ResponseTemplate::new(404)).expect(1).mount(&server).await;
         let req = reqwest::Client::new().get(server.uri());
         assert!(send_json_with_delay(req, Duration::from_millis(1)).await.is_err());
     }

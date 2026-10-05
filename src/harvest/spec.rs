@@ -59,14 +59,7 @@ pub struct JobSpec {
 }
 
 /// The original tool's default: only Gregorian-safe dates.
-const DEFAULT_LIMIT: DateLimit = DateLimit {
-    relation: Relation::AtLeast,
-    date: Date {
-        year: 1926,
-        month: 0,
-        day: 0,
-    },
-};
+const DEFAULT_LIMIT: DateLimit = DateLimit { relation: Relation::AtLeast, date: Date { year: 1926, month: 0, day: 0 } };
 
 impl Default for JobSpec {
     fn default() -> Self {
@@ -129,13 +122,7 @@ impl JobSpec {
                 "searchvalue" => spec.transform.search = value.clone(),
                 "replacevalue" => spec.transform.replace = value.clone(),
                 "wikisyntax" => spec.plain_links = v == "1",
-                "link" => {
-                    spec.link_choice = if v == "last" {
-                        LinkChoice::Last
-                    } else {
-                        LinkChoice::First
-                    }
-                }
+                "link" => spec.link_choice = if v == "last" { LinkChoice::Last } else { LinkChoice::First },
                 "calendar" if v == Calendar::Julian.item().to_string() => {
                     spec.calendar = Calendar::Julian;
                 }
@@ -149,12 +136,7 @@ impl JobSpec {
                 "category" => spec.category = v.to_string(),
                 "depth" => spec.depth = v.parse().unwrap_or(0),
                 "manuallist" => {
-                    spec.manual_list = v
-                        .lines()
-                        .map(str::trim)
-                        .filter(|l| !l.is_empty())
-                        .map(String::from)
-                        .collect();
+                    spec.manual_list = v.lines().map(str::trim).filter(|l| !l.is_empty()).map(String::from).collect();
                 }
                 "alreadyset" | "set" if v == "0" => spec.skip_if = SkipIf::Value,
                 "skipif" if v == "value" => spec.skip_if = SkipIf::Value,
@@ -166,10 +148,7 @@ impl JobSpec {
         }
         if let (Some(year), relation) = legacy_limit {
             let date = Date { year, month: 0, day: 0 };
-            spec.date_limit = Some(DateLimit {
-                relation: relation.unwrap_or(Relation::AtLeast),
-                date,
-            });
+            spec.date_limit = Some(DateLimit { relation: relation.unwrap_or(Relation::AtLeast), date });
         }
         spec.parameters.retain(|p| !p.trim().is_empty());
         spec
@@ -186,11 +165,7 @@ impl JobSpec {
         ];
         q.extend(self.property.map(|p| ("p", p.to_string())));
         q.push(("template", self.template.clone()));
-        q.extend(
-            self.template_redirects
-                .as_ref()
-                .map(|r| ("templateredirects", r.join("|"))),
-        );
+        q.extend(self.template_redirects.as_ref().map(|r| ("templateredirects", r.join("|"))));
         q.push(("parameters", self.parameters.join("|")));
         if let Some(dp) = &self.date_parameters {
             q.push(("aparameter1", dp.year.clone()));
@@ -230,43 +205,26 @@ impl JobSpec {
         }
         if let Some(limit) = self.date_limit.filter(|l| *l != DEFAULT_LIMIT) {
             q.push(("limityear", limit.date.year.to_string()));
-            q.push((
-                "rel",
-                if limit.relation == Relation::Before { "l" } else { "geq" }.into(),
-            ));
+            q.push(("rel", if limit.relation == Relation::Before { "l" } else { "geq" }.into()));
         }
         q.extend(self.unit.map(|u| ("unit", u.to_string())));
         if self.decimal_mark == DecimalMark::Comma {
             q.push(("decimalmark", ",".into()));
         }
         if let Some(c) = &self.constraints {
-            q.push((
-                "constraints",
-                c.iter().map(ItemId::to_string).collect::<Vec<_>>().join("|"),
-            ));
+            q.push(("constraints", c.iter().map(ItemId::to_string).collect::<Vec<_>>().join("|")));
         }
-        let pairs: Vec<String> = q
-            .into_iter()
-            .map(|(k, v)| format!("{k}={}", urlencoding::encode(&v)))
-            .collect();
+        let pairs: Vec<String> = q.into_iter().map(|(k, v)| format!("{k}={}", urlencoding::encode(&v))).collect();
         pairs.join("&")
     }
 }
 
 fn date_parameters(spec: &mut JobSpec) -> &mut DateParameters {
-    spec.date_parameters.get_or_insert_with(|| DateParameters {
-        year: String::new(),
-        month: None,
-        day: None,
-    })
+    spec.date_parameters.get_or_insert_with(|| DateParameters { year: String::new(), month: None, day: None })
 }
 
 fn split_pipes(s: &str) -> Vec<String> {
-    s.split('|')
-        .map(str::trim)
-        .filter(|p| !p.is_empty())
-        .map(String::from)
-        .collect()
+    s.split('|').map(str::trim).filter(|p| !p.is_empty()).map(String::from).collect()
 }
 
 fn bit(b: bool) -> String {
@@ -281,12 +239,7 @@ mod tests {
         let pairs: Vec<(String, String)> = query
             .split('&')
             .filter_map(|kv| kv.split_once('='))
-            .map(|(k, v)| {
-                (
-                    k.to_string(),
-                    urlencoding::decode(&v.replace('+', " ")).unwrap().into_owned(),
-                )
-            })
+            .map(|(k, v)| (k.to_string(), urlencoding::decode(&v.replace('+', " ")).unwrap().into_owned()))
             .collect();
         JobSpec::from_legacy_query(&pairs)
     }
@@ -301,10 +254,7 @@ mod tests {
         assert_eq!(spec.property, Some(PropertyId(227)));
         assert_eq!(spec.template_redirects, Some(vec!["Authority control".to_string()]));
         assert_eq!(spec.parameters, ["GND"]);
-        assert_eq!(
-            spec.category,
-            "Wikipedia:GND in Wikipedia vorhanden, fehlt jedoch in Wikidata"
-        );
+        assert_eq!(spec.category, "Wikipedia:GND in Wikipedia vorhanden, fehlt jedoch in Wikidata");
         assert_eq!(spec.depth, 1);
         assert_eq!(spec.constraints.as_ref().map(Vec::len), Some(5));
         assert_eq!(spec.skip_if, SkipIf::Property);

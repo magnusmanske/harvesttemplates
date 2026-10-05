@@ -44,10 +44,7 @@ impl Datatype {
     }
 
     pub fn wikibase_name(self) -> String {
-        serde_json::to_value(self)
-            .ok()
-            .and_then(|v| v.as_str().map(str::to_string))
-            .unwrap_or_default()
+        serde_json::to_value(self).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
     }
 }
 
@@ -166,11 +163,7 @@ pub fn existing_date(value: &Json) -> Option<Date> {
     let year = parts.next()?.parse().ok()?;
     let (month, day): (u8, u8) = (parts.next()?.parse().ok()?, parts.next()?.parse().ok()?);
     let precision = value["precision"].as_u64().unwrap_or(11);
-    Some(Date {
-        year,
-        month: if precision >= 10 { month } else { 0 },
-        day: if precision >= 11 { day } else { 0 },
-    })
+    Some(Date { year, month: if precision >= 10 { month } else { 0 }, day: if precision >= 11 { day } else { 0 } })
 }
 
 /// The value as a SPARQL term, for the datatypes WDQS checks need.
@@ -196,16 +189,9 @@ mod tests {
 
     #[test]
     fn datatype_names_round_trip() {
-        for name in [
-            "wikibase-item",
-            "string",
-            "external-id",
-            "url",
-            "commonsMedia",
-            "time",
-            "quantity",
-            "monolingualtext",
-        ] {
+        for name in
+            ["wikibase-item", "string", "external-id", "url", "commonsMedia", "time", "quantity", "monolingualtext"]
+        {
             assert_eq!(Datatype::from_wikibase(name).unwrap().wikibase_name(), name);
         }
         assert_eq!(Datatype::from_wikibase("globe-coordinate"), None);
@@ -213,59 +199,23 @@ mod tests {
 
     #[test]
     fn datavalues() {
-        let v = Value::Quantity {
-            amount: "+5".into(),
-            unit: None,
-        };
+        let v = Value::Quantity { amount: "+5".into(), unit: None };
         assert_eq!(v.datavalue()["value"]["unit"], "1");
-        let v = Value::Time {
-            date: Date {
-                year: 1950,
-                month: 5,
-                day: 0,
-            },
-            calendar: Calendar::Julian,
-        };
+        let v = Value::Time { date: Date { year: 1950, month: 5, day: 0 }, calendar: Calendar::Julian };
         assert_eq!(v.datavalue()["value"]["precision"], 10);
-        assert_eq!(
-            v.datavalue()["value"]["calendarmodel"],
-            "http://www.wikidata.org/entity/Q1985786"
-        );
+        assert_eq!(v.datavalue()["value"]["calendarmodel"], "http://www.wikidata.org/entity/Q1985786");
         assert_eq!(Value::Item(ItemId(42)).datavalue()["value"]["id"], "Q42");
     }
 
     #[test]
     fn matching_existing_values() {
         let time = |time: &str, precision: u8| json!({"value": {"time": time, "precision": precision}});
-        let year = Value::Time {
-            date: Date {
-                year: 1950,
-                month: 0,
-                day: 0,
-            },
-            calendar: Calendar::Gregorian,
-        };
-        let day = Value::Time {
-            date: Date {
-                year: 1950,
-                month: 5,
-                day: 12,
-            },
-            calendar: Calendar::Gregorian,
-        };
-        assert!(
-            year.matches(&time("+1950-05-12T00:00:00Z", 11)),
-            "a more precise date covers a year"
-        );
-        assert!(
-            !day.matches(&time("+1950-00-00T00:00:00Z", 9)),
-            "a year does not cover a full date"
-        );
+        let year = Value::Time { date: Date { year: 1950, month: 0, day: 0 }, calendar: Calendar::Gregorian };
+        let day = Value::Time { date: Date { year: 1950, month: 5, day: 12 }, calendar: Calendar::Gregorian };
+        assert!(year.matches(&time("+1950-05-12T00:00:00Z", 11)), "a more precise date covers a year");
+        assert!(!day.matches(&time("+1950-00-00T00:00:00Z", 9)), "a year does not cover a full date");
         assert!(day.matches(&time("+1950-05-12T00:00:00Z", 11)));
-        let qty = Value::Quantity {
-            amount: "+62".into(),
-            unit: None,
-        };
+        let qty = Value::Quantity { amount: "+62".into(), unit: None };
         assert!(qty.matches(&json!({"value": {"amount": "+62.0"}})));
         assert!(Value::String("tt1".into()).matches(&json!({"value": "tt1"})));
         assert!(!Value::String("tt1".into()).matches(&json!({"value": "tt2"})));

@@ -33,10 +33,7 @@ pub async fn load(session: &Session) -> Login {
 }
 
 pub async fn store(session: &Session, login: &Login) -> Result<(), ApiError> {
-    session
-        .insert(KEY, login)
-        .await
-        .map_err(|e| ApiError::Internal(e.into()))?;
+    session.insert(KEY, login).await.map_err(|e| ApiError::Internal(e.into()))?;
     // A new id on every privilege change prevents session fixation.
     session.cycle_id().await.map_err(|e| ApiError::Internal(e.into()))
 }
@@ -53,16 +50,8 @@ pub fn enable_dev_user(name: &str) -> anyhow::Result<()> {
     if std::path::Path::new("/etc/wmcs-project").exists() {
         anyhow::bail!("--dev-user is not allowed on Toolforge");
     }
-    let token = Token {
-        access: Secret::from("dev"),
-        refresh: None,
-        expires_at: 0,
-    };
-    let _ = DEV_USER.set(User {
-        id: 0,
-        name: name.to_string(),
-        token,
-    });
+    let token = Token { access: Secret::from("dev"), refresh: None, expires_at: 0 };
+    let _ = DEV_USER.set(User { id: 0, name: name.to_string(), token });
     Ok(())
 }
 

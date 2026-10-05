@@ -36,11 +36,7 @@ async fn load_rows(app: &AppState, run_id: u64, job: &Job) -> Result<()> {
 
 /// Errors here can only be logged: there is no one left to tell.
 async fn set_final_status(app: &AppState, run_id: u64, (status, message): (RunStatus, Option<String>)) {
-    tracing::info!(
-        "run {run_id}: {} {}",
-        status.as_str(),
-        message.as_deref().unwrap_or_default()
-    );
+    tracing::info!("run {run_id}: {} {}", status.as_str(), message.as_deref().unwrap_or_default());
     if let Err(e) = app.store.set_status(run_id, status, message.as_deref()).await {
         tracing::error!("run {run_id}: cannot store status: {e:#}");
     }
@@ -99,14 +95,7 @@ pub struct Worker {
 
 impl Worker {
     pub const fn new(app: Arc<AppState>, run: RunRecord, job: Job, mode: Mode, claim: Claim) -> Self {
-        Self {
-            app,
-            run,
-            job,
-            mode,
-            claim,
-            failures: 0,
-        }
+        Self { app, run, job, mode, claim, failures: 0 }
     }
 
     pub async fn run(mut self) {
@@ -126,25 +115,16 @@ impl Worker {
         let store = &self.app.store;
         store.set_status(self.run.id, status, message).await?;
         if let (RunStatus::Done, Some(share)) = (status, self.run.share_id) {
-            store
-                .record_share_run(share, self.run.id, &store.counts(self.run.id).await?)
-                .await?;
+            store.record_share_run(share, self.run.id, &store.counts(self.run.id).await?).await?;
         }
         Ok(())
     }
 
     async fn process(&mut self) -> Result<Flow> {
-        self.app
-            .store
-            .set_status(self.run.id, self.mode.running(), None)
-            .await?;
+        self.app.store.set_status(self.run.id, self.mode.running(), None).await?;
         let mut after = None;
         loop {
-            let rows = self
-                .app
-                .store
-                .rows_to_process(self.run.id, self.mode.statuses(), after, BATCH)
-                .await?;
+            let rows = self.app.store.rows_to_process(self.run.id, self.mode.statuses(), after, BATCH).await?;
             let Some(last) = rows.last() else {
                 return Ok(Flow::Continue);
             };
@@ -165,19 +145,12 @@ impl Worker {
     /// Re-evaluates the row against the current page and item, so nothing stale is written.
     async fn row(&mut self, row: &RowRecord, revision: Option<&Revision>) -> Result<Flow> {
         let item = row.item.as_deref().and_then(|q| q.parse().ok());
-        let page = Page {
-            id: row.page_id,
-            title: row.title.clone(),
-            item,
-            latest_revision: 0,
-        };
+        let page = Page { id: row.page_id, title: row.title.clone(), item, latest_revision: 0 };
         let outcome = match revision {
             Some(revision) => evaluate(&self.job, &self.app.clients, &page, revision).await,
-            None => Outcome {
-                raw: None,
-                value: None,
-                result: Err(Rejection::Error("the page no longer exists".into())),
-            },
+            None => {
+                Outcome { raw: None, value: None, result: Err(Rejection::Error("the page no longer exists".into())) }
+            }
         };
         let (status, message, item) = match &outcome.result {
             Err(Rejection::Skip(m)) => (RowStatus::Skipped, Some(m.clone()), None),
@@ -206,10 +179,7 @@ impl Worker {
         let summary = summary(&self.job, &edit.value, &self.run.editgroup);
         let interval = Duration::from_millis(self.app.config.harvest.edit_interval_ms);
         loop {
-            match editor
-                .add_statements(edit.item, std::slice::from_ref(&edit.statement), &summary)
-                .await
-            {
+            match editor.add_statements(edit.item, std::slice::from_ref(&edit.statement), &summary).await {
                 Ok(()) => {
                     self.failures = 0;
                     tokio::time::sleep(interval).await;

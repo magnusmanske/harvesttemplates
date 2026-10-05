@@ -43,9 +43,7 @@ struct WikiQuery {
 
 async fn load_site(app: &SharedState, q: &WikiQuery) -> Result<Site, ApiError> {
     let host = host_for(&q.siteid, &q.project).map_err(|e| ApiError::bad_request(e.to_string()))?;
-    Site::load(&app.clients.mw, &host)
-        .await
-        .map_err(|_| ApiError::bad_request(format!("cannot reach {host}")))
+    Site::load(&app.clients.mw, &host).await.map_err(|_| ApiError::bad_request(format!("cannot reach {host}")))
 }
 
 async fn site(State(app): State<SharedState>, Query(q): Query<WikiQuery>) -> ApiResult<Site> {
@@ -61,11 +59,7 @@ async fn template(State(app): State<SharedState>, Query(q): Query<WikiQuery>) ->
     let site = load_site(&app, &q).await?;
     let key = site.db_key(NS_TEMPLATE, name);
     let redirects = site.template_redirects(&app.clients.mw, &key).await?;
-    let url = format!(
-        "https://{}/wiki/{}",
-        site.host,
-        urlencoding::encode(&site.full_title(NS_TEMPLATE, &key))
-    );
+    let url = format!("https://{}/wiki/{}", site.host, urlencoding::encode(&site.full_title(NS_TEMPLATE, &key)));
     Ok(Json(
         json!({ "exists": redirects.is_some(), "name": key.replace('_', " "), "redirects": redirects, "url": url }),
     ))
@@ -89,9 +83,7 @@ async fn property(State(app): State<SharedState>, Path(id): Path<String>) -> Api
     let info = app.clients.wikidata.property(id).await?.ok_or(ApiError::NotFound)?;
     let units: Option<Vec<Option<ItemId>>> = info.constraint(ALLOWED_UNITS).map(|c| {
         let snaks = c.snaks(ITEM_OF_CONSTRAINT).iter();
-        snaks
-            .map(|s| s["datavalue"]["value"]["id"].as_str().and_then(|q| q.parse().ok()))
-            .collect()
+        snaks.map(|s| s["datavalue"]["value"]["id"].as_str().and_then(|q| q.parse().ok())).collect()
     });
     let mut label_ids: Vec<String> = info.constraints.iter().map(|c| c.kind.to_string()).collect();
     label_ids.extend(units.iter().flatten().flatten().map(ItemId::to_string));

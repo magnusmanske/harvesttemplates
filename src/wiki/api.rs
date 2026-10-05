@@ -19,23 +19,15 @@ pub fn params(pairs: &[(&str, &str)]) -> Params {
 
 impl MwApi {
     pub const fn new(http: reqwest::Client) -> Self {
-        Self {
-            http,
-            base_url_override: None,
-        }
+        Self { http, base_url_override: None }
     }
 
     pub const fn with_base_url(http: reqwest::Client, url: String) -> Self {
-        Self {
-            http,
-            base_url_override: Some(url),
-        }
+        Self { http, base_url_override: Some(url) }
     }
 
     pub fn api_url(&self, host: &str) -> String {
-        self.base_url_override
-            .clone()
-            .unwrap_or_else(|| format!("https://{host}/w/api.php"))
+        self.base_url_override.clone().unwrap_or_else(|| format!("https://{host}/w/api.php"))
     }
 
     /// One request. Long parameter lists (e.g. 50 page ids) go as POST.

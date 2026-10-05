@@ -73,45 +73,26 @@ mod tests {
 
     #[test]
     fn affixes() {
-        let spec = TransformSpec {
-            add_prefix: "tt".into(),
-            ..Default::default()
-        };
+        let spec = TransformSpec { add_prefix: "tt".into(), ..Default::default() };
         assert_eq!(transform(spec, "0111161"), "tt0111161");
         // #170: literal prefix including its trailing space
-        let spec = TransformSpec {
-            remove_prefix: "prefix ".into(),
-            ..Default::default()
-        };
+        let spec = TransformSpec { remove_prefix: "prefix ".into(), ..Default::default() };
         assert_eq!(transform(spec, "prefix [[value]]"), "[[value]]");
-        let spec = TransformSpec {
-            remove_suffix: ".html".into(),
-            ..Default::default()
-        };
+        let spec = TransformSpec { remove_suffix: ".html".into(), ..Default::default() };
         assert_eq!(transform(spec, "a.b.html"), "a.b");
     }
 
     #[test]
     fn regex_replace_with_js_groups() {
-        let spec = TransformSpec {
-            search: r"^(\d+)-(\d+)$".into(),
-            replace: "$2a$1".into(),
-            ..Default::default()
-        };
+        let spec = TransformSpec { search: r"^(\d+)-(\d+)$".into(), replace: "$2a$1".into(), ..Default::default() };
         assert_eq!(transform(spec, "12-34"), "34a12");
     }
 
     #[test]
     fn invalid_regex_is_rejected() {
-        let spec = TransformSpec {
-            search: "(".into(),
-            ..Default::default()
-        };
+        let spec = TransformSpec { search: "(".into(), ..Default::default() };
         assert!(Transform::new(spec).is_err());
-        let spec = TransformSpec {
-            search: r"(a)\1".into(),
-            ..Default::default()
-        };
+        let spec = TransformSpec { search: r"(a)\1".into(), ..Default::default() };
         assert!(Transform::new(spec).is_err(), "backreferences are not supported");
     }
 }

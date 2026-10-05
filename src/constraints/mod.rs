@@ -47,19 +47,11 @@ pub struct ConstraintType {
 }
 
 const fn local(id: u64, name: &'static str, f: fn(&ConstraintDef, &Candidate) -> bool) -> ConstraintType {
-    ConstraintType {
-        id: ItemId(id),
-        name,
-        rule: Rule::Local(f),
-    }
+    ConstraintType { id: ItemId(id), name, rule: Rule::Local(f) }
 }
 
 const fn remote(id: u64, name: &'static str, r: Remote) -> ConstraintType {
-    ConstraintType {
-        id: ItemId(id),
-        name,
-        rule: Rule::Remote(r),
-    }
+    ConstraintType { id: ItemId(id), name, rule: Rule::Remote(r) }
 }
 
 /// Every supported constraint type.

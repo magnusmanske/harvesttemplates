@@ -37,17 +37,12 @@ struct CreateRun {
 async fn create(State(app): State<SharedState>, session: Session, Json(body): Json<CreateRun>) -> ApiResult<Value> {
     let user = require_user(&session).await?;
     let job = Job::prepare(&app.clients, body.spec.clone()).await?;
-    let owner = Owner {
-        id: user.id,
-        name: user.name,
-    };
+    let owner = Owner { id: user.id, name: user.name };
     let id = app.store.create_run(&owner, &body.spec, body.share_id).await?;
     let claim = match app.runs.claim(id, user.id, app.config.harvest.max_active_runs_per_user) {
         Ok(claim) => claim,
         Err(e) => {
-            app.store
-                .set_status(id, RunStatus::Failed, Some(&e.to_string()))
-                .await?;
+            app.store.set_status(id, RunStatus::Failed, Some(&e.to_string())).await?;
             return Err(e.into());
         }
     };
@@ -66,9 +61,7 @@ async fn show(State(app): State<SharedState>, Path(id): Path<u64>) -> ApiResult<
     let permalink = run.spec.to_legacy_query();
     let host = host_for(&run.spec.siteid, &run.spec.project).ok();
     let active = app.runs.is_active(id);
-    Ok(Json(
-        json!({ "run": run, "counts": counts, "active": active, "permalink": permalink, "host": host }),
-    ))
+    Ok(Json(json!({ "run": run, "counts": counts, "active": active, "permalink": permalink, "host": host })))
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,10 +111,7 @@ async fn csv_log(State(app): State<SharedState>, Path(id): Path<u64>) -> Result<
     let body = csv.into_inner().map_err(|e| anyhow::anyhow!("{e}"))?;
     let disposition = format!("attachment; filename=\"harvesttemplates-run-{id}.csv\"");
     Ok((
-        [
-            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
-            (header::CONTENT_DISPOSITION, disposition),
-        ],
+        [(header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()), (header::CONTENT_DISPOSITION, disposition)],
         body,
     ))
 }
@@ -144,18 +134,11 @@ async fn start_worker(app: SharedState, session: &Session, id: u64, edit: bool) 
     if run.status == RunStatus::Loading {
         return Err(ApiError::bad_request("the run is still loading"));
     }
-    let claim = app
-        .runs
-        .claim(id, user.id, app.config.harvest.max_active_runs_per_user)?;
+    let claim = app.runs.claim(id, user.id, app.config.harvest.max_active_runs_per_user)?;
     let job = Job::prepare(&app.clients, run.spec.clone()).await?;
     let mode = if edit {
         app.tokens.freshest(user.id, user.token);
-        let editor = Editor::new(
-            app.oauth.clone(),
-            app.wikidata_api_url.clone(),
-            user.id,
-            app.tokens.clone(),
-        );
+        let editor = Editor::new(app.oauth.clone(), app.wikidata_api_url.clone(), user.id, app.tokens.clone());
         Mode::Edit(Box::new(editor))
     } else {
         Mode::Preview

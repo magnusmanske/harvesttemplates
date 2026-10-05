@@ -29,12 +29,7 @@ impl Wikidata {
         let mut out = Vec::with_capacity(ids.len());
         for chunk in ids.chunks(IDS_PER_REQUEST) {
             let ids = chunk.join("|");
-            let p = params(&[
-                ("action", "wbgetentities"),
-                ("ids", &ids),
-                ("props", props),
-                ("languages", "en"),
-            ]);
+            let p = params(&[("action", "wbgetentities"), ("ids", &ids), ("props", props), ("languages", "en")]);
             let json = self.api.get(HOST, &p).await?;
             let entities = json["entities"].as_object().into_iter().flat_map(Map::values);
             out.extend(entities.filter(|e| e.get("missing").is_none()).cloned());
@@ -78,19 +73,12 @@ pub struct Entity {
 impl Entity {
     pub fn new(json: Json) -> Option<Self> {
         let id = json["id"].as_str()?.parse().ok()?;
-        let claims = json
-            .get("claims")
-            .and_then(Json::as_object)
-            .cloned()
-            .unwrap_or_default();
+        let claims = json.get("claims").and_then(Json::as_object).cloned().unwrap_or_default();
         Some(Self { id, claims })
     }
 
     pub fn statements(&self, property: PropertyId) -> &[Json] {
-        self.claims
-            .get(&property.to_string())
-            .and_then(Json::as_array)
-            .map_or(&[], Vec::as_slice)
+        self.claims.get(&property.to_string()).and_then(Json::as_array).map_or(&[], Vec::as_slice)
     }
 
     pub fn has_property(&self, property: PropertyId) -> bool {
@@ -139,20 +127,9 @@ pub struct ConstraintDef {
 
 impl ConstraintDef {
     pub(crate) fn from_statement(statement: &Json) -> Option<Self> {
-        let kind = statement["mainsnak"]["datavalue"]["value"]["id"]
-            .as_str()?
-            .parse()
-            .ok()?;
-        let qualifiers = statement
-            .get("qualifiers")
-            .and_then(Json::as_object)
-            .cloned()
-            .unwrap_or_default();
-        let mut def = Self {
-            kind,
-            status: ConstraintStatus::Normal,
-            qualifiers,
-        };
+        let kind = statement["mainsnak"]["datavalue"]["value"]["id"].as_str()?.parse().ok()?;
+        let qualifiers = statement.get("qualifiers").and_then(Json::as_object).cloned().unwrap_or_default();
+        let mut def = Self { kind, status: ConstraintStatus::Normal, qualifiers };
         def.status = match def.items(CONSTRAINT_STATUS).first() {
             Some(&MANDATORY) => ConstraintStatus::Mandatory,
             Some(&SUGGESTION) => ConstraintStatus::Suggestion,
@@ -163,25 +140,17 @@ impl ConstraintDef {
 
     /// Qualifier snaks for `property`.
     pub fn snaks(&self, property: PropertyId) -> &[Json] {
-        self.qualifiers
-            .get(&property.to_string())
-            .and_then(Json::as_array)
-            .map_or(&[], Vec::as_slice)
+        self.qualifiers.get(&property.to_string()).and_then(Json::as_array).map_or(&[], Vec::as_slice)
     }
 
     /// Entity-id qualifier values (item or property ids, as strings).
     pub fn entity_ids(&self, property: PropertyId) -> Vec<String> {
         let snaks = self.snaks(property).iter();
-        snaks
-            .filter_map(|s| s["datavalue"]["value"]["id"].as_str().map(str::to_string))
-            .collect()
+        snaks.filter_map(|s| s["datavalue"]["value"]["id"].as_str().map(str::to_string)).collect()
     }
 
     pub fn items(&self, property: PropertyId) -> Vec<ItemId> {
-        self.entity_ids(property)
-            .iter()
-            .filter_map(|id| id.parse().ok())
-            .collect()
+        self.entity_ids(property).iter().filter_map(|id| id.parse().ok()).collect()
     }
 
     pub fn first_property(&self, property: PropertyId) -> Option<PropertyId> {
@@ -189,9 +158,7 @@ impl ConstraintDef {
     }
 
     pub fn first_string(&self, property: PropertyId) -> Option<&str> {
-        self.snaks(property)
-            .iter()
-            .find_map(|s| s["datavalue"]["value"].as_str())
+        self.snaks(property).iter().find_map(|s| s["datavalue"]["value"].as_str())
     }
 }
 
@@ -209,26 +176,18 @@ pub struct PropertyInfo {
 impl PropertyInfo {
     fn from_json(id: PropertyId, json: &Json) -> Self {
         let entity = Entity::new(json.clone());
-        let deprecated = entity.as_ref().is_some_and(|e| {
-            e.item_values(INSTANCE_OF)
-                .iter()
-                .any(|c| DEPRECATED_PROPERTY_CLASSES.contains(c))
-        });
+        let deprecated = entity
+            .as_ref()
+            .is_some_and(|e| e.item_values(INSTANCE_OF).iter().any(|c| DEPRECATED_PROPERTY_CLASSES.contains(c)));
         let statements = json["claims"][PROPERTY_CONSTRAINT.to_string()].as_array();
         let datatype_name = json["datatype"].as_str().unwrap_or_default().to_string();
         Self {
             id,
-            label: json["labels"]["en"]["value"]
-                .as_str()
-                .map_or_else(|| id.to_string(), str::to_string),
+            label: json["labels"]["en"]["value"].as_str().map_or_else(|| id.to_string(), str::to_string),
             datatype: Datatype::from_wikibase(&datatype_name),
             datatype_name,
             deprecated,
-            constraints: statements
-                .into_iter()
-                .flatten()
-                .filter_map(ConstraintDef::from_statement)
-                .collect(),
+            constraints: statements.into_iter().flatten().filter_map(ConstraintDef::from_statement).collect(),
         }
     }
 
@@ -263,20 +222,8 @@ mod tests {
         assert_eq!(info.datatype, Some(Datatype::ExternalId));
         assert!(!info.deprecated);
         let statuses: Vec<_> = info.constraints.iter().map(|c| c.status).collect();
-        assert_eq!(
-            statuses,
-            [
-                ConstraintStatus::Mandatory,
-                ConstraintStatus::Normal,
-                ConstraintStatus::Suggestion
-            ]
-        );
-        assert_eq!(
-            info.constraint(ItemId(21_502_404))
-                .unwrap()
-                .first_string(PropertyId(1793)),
-            Some("tt\\d+")
-        );
+        assert_eq!(statuses, [ConstraintStatus::Mandatory, ConstraintStatus::Normal, ConstraintStatus::Suggestion]);
+        assert_eq!(info.constraint(ItemId(21_502_404)).unwrap().first_string(PropertyId(1793)), Some("tt\\d+"));
     }
 
     #[test]
@@ -289,9 +236,6 @@ mod tests {
         assert!(entity.has_property(PropertyId(31)));
         assert!(!entity.has_property(PropertyId(21)));
         assert!(entity.has_value(PropertyId(31), &Value::Item(ItemId(5))));
-        assert!(
-            !entity.has_value(PropertyId(31), &Value::Item(ItemId(6))),
-            "deprecated statements don't count"
-        );
+        assert!(!entity.has_value(PropertyId(31), &Value::Item(ItemId(6))), "deprecated statements don't count");
     }
 }

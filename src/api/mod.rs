@@ -37,9 +37,7 @@ pub fn router(state: SharedState) -> Router {
         .with_secure(state.config.server.cookie_secure)
         .with_same_site(SameSite::Lax)
         .with_http_only(true)
-        .with_expiry(Expiry::OnInactivity(time::Duration::days(
-            state.config.server.session_lifetime_days,
-        )));
+        .with_expiry(Expiry::OnInactivity(time::Duration::days(state.config.server.session_lifetime_days)));
     let api = Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .nest("/auth", auth::routes())
@@ -52,10 +50,7 @@ pub fn router(state: SharedState) -> Router {
     let middleware = ServiceBuilder::new()
         .layer(TraceLayer::new_for_http())
         .layer(CatchPanicLayer::new())
-        .layer(TimeoutLayer::with_status_code(
-            StatusCode::GATEWAY_TIMEOUT,
-            REQUEST_TIMEOUT,
-        ))
+        .layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_TIMEOUT))
         .layer(CompressionLayer::new())
         .layer(header_layer(header::X_CONTENT_TYPE_OPTIONS, "nosniff"))
         .layer(header_layer(header::X_FRAME_OPTIONS, "DENY"))
@@ -109,10 +104,7 @@ mod tests {
         let app = Router::new()
             .route("/x", post(|| async { "ok" }).get(|| async { "ok" }))
             .layer(middleware::from_fn(same_origin_writes));
-        let mut req = Request::builder()
-            .method(method)
-            .uri("/x")
-            .header(header::HOST, "ht.toolforge.org");
+        let mut req = Request::builder().method(method).uri("/x").header(header::HOST, "ht.toolforge.org");
         if let Some(o) = origin {
             req = req.header(header::ORIGIN, o);
         }
@@ -122,11 +114,7 @@ mod tests {
     async fn call(method: Method, uri: &str, body: &str) -> (StatusCode, serde_json::Value) {
         let sessions = tempfile::tempdir().unwrap();
         let store = crate::storage::Store::from_url("mysql://nobody@127.0.0.1:1/none", 1).unwrap();
-        let app = router(crate::test_support::test_app(
-            store,
-            "http://127.0.0.1:1",
-            sessions.path(),
-        ));
+        let app = router(crate::test_support::test_app(store, "http://127.0.0.1:1", sessions.path()));
         let req = Request::builder()
             .method(method)
             .uri(uri)
@@ -142,53 +130,26 @@ mod tests {
 
     #[tokio::test]
     async fn endpoints_without_login() {
-        let (status, json) = call(
-            Method::GET,
-            "/api/spec/from-query?p=345&template=IMDb%20title&parameters=1",
-            "",
-        )
-        .await;
+        let (status, json) =
+            call(Method::GET, "/api/spec/from-query?p=345&template=IMDb%20title&parameters=1", "").await;
         assert_eq!(
             (status, json["property"].as_str(), json["parameters"][0].as_str()),
             (StatusCode::OK, Some("P345"), Some("1"))
         );
-        let (status, json) = call(
-            Method::POST,
-            "/api/spec/to-query",
-            r#"{"property":"P345","template":"X"}"#,
-        )
-        .await;
+        let (status, json) = call(Method::POST, "/api/spec/to-query", r#"{"property":"P345","template":"X"}"#).await;
         assert_eq!(status, StatusCode::OK);
         assert!(json["query"].as_str().unwrap().contains("p=P345&template=X"));
-        assert_eq!(
-            call(Method::GET, "/api/auth/me", "").await.1,
-            serde_json::json!({"user": null})
-        );
+        assert_eq!(call(Method::GET, "/api/auth/me", "").await.1, serde_json::json!({"user": null}));
         let (status, json) = call(Method::POST, "/api/runs", r#"{"spec":{}}"#).await;
-        assert_eq!(
-            (status, json["error"].as_str()),
-            (StatusCode::UNAUTHORIZED, Some("not logged in"))
-        );
-        assert_eq!(
-            call(Method::POST, "/api/runs/1/start", "").await.0,
-            StatusCode::UNAUTHORIZED
-        );
-        assert_eq!(
-            call(Method::GET, "/api/property/X1", "").await.0,
-            StatusCode::BAD_REQUEST
-        );
+        assert_eq!((status, json["error"].as_str()), (StatusCode::UNAUTHORIZED, Some("not logged in")));
+        assert_eq!(call(Method::POST, "/api/runs/1/start", "").await.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(call(Method::GET, "/api/property/X1", "").await.0, StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
     async fn cross_site_writes_are_refused() {
-        assert_eq!(
-            status(Method::POST, Some("https://evil.example")).await,
-            StatusCode::FORBIDDEN
-        );
-        assert_eq!(
-            status(Method::POST, Some("https://ht.toolforge.org")).await,
-            StatusCode::OK
-        );
+        assert_eq!(status(Method::POST, Some("https://evil.example")).await, StatusCode::FORBIDDEN);
+        assert_eq!(status(Method::POST, Some("https://ht.toolforge.org")).await, StatusCode::OK);
         assert_eq!(status(Method::POST, None).await, StatusCode::OK);
         assert_eq!(status(Method::GET, Some("https://evil.example")).await, StatusCode::OK);
     }

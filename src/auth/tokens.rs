@@ -20,18 +20,11 @@ impl TokenCache {
     }
 
     pub fn get(&self, user: u64) -> Option<Token> {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&user)
-            .cloned()
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).get(&user).cloned()
     }
 
     pub fn replace(&self, user: u64, token: Token) {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(user, token);
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).insert(user, token);
     }
 }
 
@@ -41,11 +34,7 @@ mod tests {
     use crate::config::Secret;
 
     fn token(access: &str, expires_at: i64) -> Token {
-        Token {
-            access: Secret::from(access),
-            refresh: None,
-            expires_at,
-        }
+        Token { access: Secret::from(access), refresh: None, expires_at }
     }
 
     #[test]

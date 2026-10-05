@@ -20,10 +20,7 @@ macro_rules! entity_id {
             type Err = String;
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 let s = s.trim();
-                let digits = s
-                    .strip_prefix($prefix)
-                    .or_else(|| s.strip_prefix(&$prefix.to_lowercase()))
-                    .unwrap_or(s);
+                let digits = s.strip_prefix($prefix).or_else(|| s.strip_prefix(&$prefix.to_lowercase())).unwrap_or(s);
                 match digits.parse::<u64>() {
                     Ok(n) if n > 0 => Ok(Self(n)),
                     _ => Err(format!(concat!("not a valid ", $prefix, "-id: {}"), s)),

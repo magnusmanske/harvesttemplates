@@ -15,9 +15,7 @@ use tower_sessions::Session;
 const MAX_TITLE: usize = 255;
 
 pub fn routes() -> Router<SharedState> {
-    Router::new()
-        .route("/", get(list).post(create))
-        .route("/{id}", get(show).delete(delete))
+    Router::new().route("/", get(list).post(create)).route("/{id}", get(show).delete(delete))
 }
 
 async fn list(State(app): State<SharedState>) -> ApiResult<Vec<ShareRecord>> {
@@ -39,15 +37,10 @@ async fn create(State(app): State<SharedState>, session: Session, Json(body): Js
     let user = require_user(&session).await?;
     let title = body.title.trim();
     if title.is_empty() || title.chars().count() > MAX_TITLE {
-        return Err(ApiError::bad_request(format!(
-            "the title must have 1 to {MAX_TITLE} characters"
-        )));
+        return Err(ApiError::bad_request(format!("the title must have 1 to {MAX_TITLE} characters")));
     }
     Job::prepare(&app.clients, body.spec.clone()).await?;
-    let owner = Owner {
-        id: user.id,
-        name: user.name,
-    };
+    let owner = Owner { id: user.id, name: user.name };
     let id = app.store.create_share(&owner, title, &body.spec).await?;
     Ok(Json(json!({ "id": id })))
 }

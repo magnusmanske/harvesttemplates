@@ -57,26 +57,13 @@ impl ActiveRuns {
             return Err(ClaimError::TooMany(max_per_user));
         }
         let stop = Arc::new(AtomicBool::new(false));
-        runs.insert(
-            run_id,
-            Active {
-                user_id,
-                stop: stop.clone(),
-            },
-        );
-        Ok(Claim {
-            runs: self.clone(),
-            run_id,
-            stop,
-        })
+        runs.insert(run_id, Active { user_id, stop: stop.clone() });
+        Ok(Claim { runs: self.clone(), run_id, stop })
     }
 
     /// Ask the run's task to stop after the current row. `false` if nothing is running.
     pub fn stop(&self, run_id: u64) -> bool {
-        self.lock()
-            .get(&run_id)
-            .map(|a| a.stop.store(true, Ordering::Relaxed))
-            .is_some()
+        self.lock().get(&run_id).map(|a| a.stop.store(true, Ordering::Relaxed)).is_some()
     }
 
     pub fn is_active(&self, run_id: u64) -> bool {

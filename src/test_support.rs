@@ -16,10 +16,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// A migrated store in a fresh MariaDB container. Keep the container alive for the test.
 pub async fn test_store() -> (ContainerAsync<Mariadb>, Store) {
-    let container = Mariadb::default()
-        .start()
-        .await
-        .expect("Docker must be running for DB tests");
+    let container = Mariadb::default().start().await.expect("Docker must be running for DB tests");
     let port = container.get_host_port_ipv4(3306).await.unwrap();
     let store = Store::from_url(&format!("mysql://root@127.0.0.1:{port}/test"), 4).unwrap();
     store.migrate().await.unwrap();
@@ -32,9 +29,7 @@ pub fn test_app(store: Store, mock_url: &str, session_dir: &std::path::Path) -> 
     config.harvest.edit_interval_ms = 0;
     let clients = Clients::mocked(mock_url);
     Arc::new(AppState {
-        pages: Arc::new(ApiSource {
-            api: clients.mw.clone(),
-        }),
+        pages: Arc::new(ApiSource { api: clients.mw.clone() }),
         oauth: OAuth::with_base(reqwest::Client::new(), &config.oauth, mock_url),
         sessions: FileSessionStore::new(session_dir.to_path_buf()).unwrap(),
         wikidata_api_url: mock_url.to_string(),
@@ -95,12 +90,8 @@ pub async fn world() -> (MockServer, Clients) {
         }}}),
     )
     .await;
-    mock(
-        &server,
-        "ids=P19&",
-        json!({"entities": {"P19": {"id": "P19", "datatype": "wikibase-item", "claims": {}}}}),
-    )
-    .await;
+    mock(&server, "ids=P19&", json!({"entities": {"P19": {"id": "P19", "datatype": "wikibase-item", "claims": {}}}}))
+        .await;
     mock(
         &server,
         "prop=redirects",
@@ -109,12 +100,7 @@ pub async fn world() -> (MockServer, Clients) {
         ]}}),
     )
     .await;
-    mock(
-        &server,
-        "ids=Q1&",
-        json!({"entities": {"Q1": {"id": "Q1", "claims": {}}}}),
-    )
-    .await;
+    mock(&server, "ids=Q1&", json!({"entities": {"Q1": {"id": "Q1", "claims": {}}}})).await;
     mock(
         &server,
         "ids=Q2&",
@@ -135,12 +121,7 @@ pub async fn world() -> (MockServer, Clients) {
         json!({"query": {"pages": [{"title": "Self", "pageprops": {"wikibase_item": "Q1"}}]}}),
     )
     .await;
-    mock(
-        &server,
-        "titles=Nowhere&",
-        json!({"query": {"pages": [{"title": "Nowhere", "missing": true}]}}),
-    )
-    .await;
+    mock(&server, "titles=Nowhere&", json!({"query": {"pages": [{"title": "Nowhere", "missing": true}]}})).await;
     let clients = Clients::mocked(&server.uri());
     (server, clients)
 }

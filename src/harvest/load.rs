@@ -28,15 +28,11 @@ pub async fn candidates(
     limits: Limits,
 ) -> Result<(Vec<Page>, Excluded)> {
     let spec = &job.spec;
-    let mut pages = source
-        .transclusions(&job.site, &job.template_key, spec.namespace, limits)
-        .await?;
+    let mut pages = source.transclusions(&job.site, &job.template_key, spec.namespace, limits).await?;
     let mut excluded = Excluded::default();
     if !spec.category.trim().is_empty() {
         let category = job.site.db_key(NS_CATEGORY, &spec.category);
-        let members = source
-            .category_members(&job.site, &category, spec.namespace, spec.depth, limits)
-            .await?;
+        let members = source.category_members(&job.site, &category, spec.namespace, spec.depth, limits).await?;
         excluded.not_in_category = retain(&mut pages, |p| members.contains(&p.id));
     }
     if !spec.manual_list.is_empty() {

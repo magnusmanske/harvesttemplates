@@ -54,11 +54,7 @@ pub struct Outcome {
 }
 
 pub async fn evaluate(job: &Job, clients: &Clients, page: &Page, revision: &Revision) -> Outcome {
-    let mut outcome = Outcome {
-        raw: None,
-        value: None,
-        result: Err(skip("")),
-    };
+    let mut outcome = Outcome { raw: None, value: None, result: Err(skip("")) };
     outcome.result = steps(job, clients, page, revision, &mut outcome).await;
     outcome
 }
@@ -78,37 +74,21 @@ async fn steps(
     let entity = clients.wikidata.item(item).await.map_err(failed)?;
     let entity = entity.ok_or_else(|| error("the item does not exist"))?;
     check_existing(job, &entity, &value)?;
-    let candidate = Candidate {
-        item: &entity,
-        property: job.property.id,
-        datatype: job.datatype,
-        value: &value,
-        qualifiers: &[],
-    };
+    let candidate =
+        Candidate { item: &entity, property: job.property.id, datatype: job.datatype, value: &value, qualifiers: &[] };
     let defs: Vec<_> = job.constraints.iter().collect();
-    if let Some(name) = first_violation(&defs, &candidate, clients.services())
-        .await
-        .map_err(failed)?
-    {
+    if let Some(name) = first_violation(&defs, &candidate, clients.services()).await.map_err(failed)? {
         return Err(error(format!("constraint violation: {name}")));
     }
     let source = Source::new(job.site.edition, &job.site.host, &page.title, revision.id);
     let statement = statement(job.property.id, job.datatype, &value, &source);
-    Ok(PlannedEdit {
-        item: entity.id,
-        value,
-        statement,
-    })
+    Ok(PlannedEdit { item: entity.id, value, statement })
 }
 
 #[derive(Debug)]
 enum RawValue {
     Text(String),
-    DateParts {
-        year: String,
-        month: Option<String>,
-        day: Option<String>,
-    },
+    DateParts { year: String, month: Option<String>, day: Option<String> },
 }
 
 impl std::fmt::Display for RawValue {
@@ -133,15 +113,9 @@ fn extract(job: &Job, page: &Page, wikitext: &str) -> Result<RawValue, Rejection
     if let Some(dp) = &job.spec.date_parameters {
         let get = |name: &Option<String>| name.as_deref().and_then(|n| params.get(n)).map(clean_value);
         let year = params.get(&dp.year).map(clean_value).ok_or_else(|| skip("no value"))?;
-        return Ok(RawValue::DateParts {
-            year,
-            month: get(&dp.month),
-            day: get(&dp.day),
-        });
+        return Ok(RawValue::DateParts { year, month: get(&dp.month), day: get(&dp.day) });
     }
-    let raw = params
-        .first_of(job.spec.parameters.iter().map(String::as_str))
-        .ok_or_else(|| skip("no value"))?;
+    let raw = params.first_of(job.spec.parameters.iter().map(String::as_str)).ok_or_else(|| skip("no value"))?;
     Ok(RawValue::Text(clean_value(raw)))
 }
 
@@ -165,15 +139,9 @@ async fn parse(job: &Job, clients: &Clients, raw: &RawValue, item: ItemId) -> Re
         Datatype::String | Datatype::ExternalId => Ok(Value::String(text)),
         Datatype::Time => time_value(job, value::parse_date(&text, lang, calendar).map_err(bad_value)?),
         Datatype::Quantity => value::parse_amount(&text, job.spec.decimal_mark)
-            .map(|amount| Value::Quantity {
-                amount,
-                unit: job.spec.unit,
-            })
+            .map(|amount| Value::Quantity { amount, unit: job.spec.unit })
             .map_err(bad_value),
-        Datatype::Monolingual => Ok(Value::Monolingual {
-            text,
-            language: job.spec.language.clone(),
-        }),
+        Datatype::Monolingual => Ok(Value::Monolingual { text, language: job.spec.language.clone() }),
     }
 }
 
@@ -181,18 +149,12 @@ fn time_value(job: &Job, date: Date) -> Result<Value, Rejection> {
     if job.spec.date_limit.is_some_and(|limit| !limit.accepts(&date)) {
         return Err(bad_value(ValueError::OutsideDateLimit));
     }
-    Ok(Value::Time {
-        date,
-        calendar: job.spec.calendar,
-    })
+    Ok(Value::Time { date, calendar: job.spec.calendar })
 }
 
 async fn resolve_item(job: &Job, clients: &Clients, text: &str, item: ItemId) -> Result<Value, Rejection> {
     let title = value::link_target(text, job.spec.plain_links, job.spec.link_choice).map_err(bad_value)?;
-    match content::link_target(&clients.mw, &job.site, &title)
-        .await
-        .map_err(failed)?
-    {
+    match content::link_target(&clients.mw, &job.site, &title).await.map_err(failed)? {
         LinkTarget::Item(q) if q == item => Err(error("the link points to the page itself")),
         LinkTarget::Item(q) => Ok(Value::Item(q)),
         LinkTarget::NoItem => Err(error(format!("[[{title}]] has no Wikidata item"))),
@@ -202,15 +164,9 @@ async fn resolve_item(job: &Job, clients: &Clients, text: &str, item: ItemId) ->
 
 async fn commons_file(job: &Job, clients: &Clients, text: &str) -> Result<Value, Rejection> {
     let name = value::file_name(text, &job.site.file_prefixes).map_err(bad_value)?;
-    match content::file_location(&clients.mw, &job.site, &name)
-        .await
-        .map_err(failed)?
-    {
+    match content::file_location(&clients.mw, &job.site, &name).await.map_err(failed)? {
         FileLocation::Commons => Ok(Value::String(name)),
-        FileLocation::Local => Err(error(format!(
-            "the file is only on {}, not on Commons",
-            job.site.dbname
-        ))),
+        FileLocation::Local => Err(error(format!("the file is only on {}, not on Commons", job.site.dbname))),
         FileLocation::Missing => Err(error("the file does not exist")),
     }
 }

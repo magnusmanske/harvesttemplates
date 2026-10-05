@@ -81,12 +81,7 @@ pub struct ServerConfig {
 
 impl Default for ServerConfig {
     fn default() -> Self {
-        Self {
-            html_dir: "html".into(),
-            session_dir: "sessions".into(),
-            session_lifetime_days: 30,
-            cookie_secure: true,
-        }
+        Self { html_dir: "html".into(), session_dir: "sessions".into(), session_lifetime_days: 30, cookie_secure: true }
     }
 }
 
@@ -163,10 +158,7 @@ impl Config {
             serde_json::from_str(&text).with_context(|| format!("invalid config file {}", path.display()))?;
         let dir = path.parent().unwrap_or(Path::new("."));
         let db = read_key_values(&dir.join(&config.db_credentials))?;
-        config.db_user = DbUser {
-            name: required(&db, "user")?,
-            password: Secret(required(&db, "password")?),
-        };
+        config.db_user = DbUser { name: required(&db, "user")?, password: Secret(required(&db, "password")?) };
         config.tool_db.database = config.tool_db.database.replace("{user}", &config.db_user.name);
         let oauth = read_key_values(&dir.join(&config.oauth_file))?;
         config.oauth = OauthConfig {
@@ -192,11 +184,7 @@ fn read_key_values(path: &Path) -> Result<HashMap<String, String>> {
 }
 
 fn required(values: &HashMap<String, String>, key: &str) -> Result<String> {
-    values
-        .get(key)
-        .filter(|v| !v.is_empty())
-        .cloned()
-        .with_context(|| format!("credentials file lacks '{key}'"))
+    values.get(key).filter(|v| !v.is_empty()).cloned().with_context(|| format!("credentials file lacks '{key}'"))
 }
 
 #[cfg(test)]
@@ -208,11 +196,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.json");
         std::fs::write(&path, include_str!("../config.json.template")).unwrap();
-        std::fs::write(
-            dir.path().join("replica.my.cnf"),
-            "[client]\nuser = s1234\npassword = 'pw=1'\n",
-        )
-        .unwrap();
+        std::fs::write(dir.path().join("replica.my.cnf"), "[client]\nuser = s1234\npassword = 'pw=1'\n").unwrap();
         std::fs::write(
             dir.path().join("oauth.ini"),
             "; OAuth 2\napplication_key=abc\napplication_secret=\"def\"\ncallback_url=\"https://x.toolforge.org/callback\"\n",
@@ -222,10 +206,7 @@ mod tests {
         assert_eq!(cfg.db_user.name, "s1234");
         assert_eq!(cfg.db_user.password.expose(), "pw=1");
         assert_eq!(cfg.tool_db.database, "s1234__harvesttemplates");
-        assert_eq!(
-            (cfg.oauth.client_id.as_str(), cfg.oauth.client_secret.expose()),
-            ("abc", "def")
-        );
+        assert_eq!((cfg.oauth.client_id.as_str(), cfg.oauth.client_secret.expose()), ("abc", "def"));
         assert_eq!(cfg.oauth.callback_url, "https://x.toolforge.org/callback");
         let dbg = format!("{cfg:?}");
         assert!(!dbg.contains("pw=1") && !dbg.contains("def"), "{dbg}");

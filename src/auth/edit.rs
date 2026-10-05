@@ -45,13 +45,7 @@ pub struct Editor {
 impl Editor {
     /// `user` must have a token in `tokens`.
     pub const fn new(oauth: OAuth, api_url: String, user: u64, tokens: Arc<TokenCache>) -> Self {
-        Self {
-            oauth,
-            api_url,
-            user,
-            tokens,
-            csrf: None,
-        }
+        Self { oauth, api_url, user, tokens, csrf: None }
     }
 
     /// Add new statements to an item in one edit.
@@ -102,24 +96,17 @@ impl Editor {
         match self.oauth.post(&self.api_url, params, &token).await {
             Err(CallError::Unauthorized) => {
                 let token = self.refresh(&token).await?;
-                self.oauth
-                    .post(&self.api_url, params, &token)
-                    .await
-                    .map_err(|e| match e {
-                        CallError::Unauthorized => logged_out("the login was rejected"),
-                        CallError::Other(e) => EditError::Failed(e),
-                    })
+                self.oauth.post(&self.api_url, params, &token).await.map_err(|e| match e {
+                    CallError::Unauthorized => logged_out("the login was rejected"),
+                    CallError::Other(e) => EditError::Failed(e),
+                })
             }
             result => result.map_err(|e| EditError::Failed(anyhow!(e))),
         }
     }
 
     async fn refresh(&self, token: &Token) -> Result<Token, EditError> {
-        let fresh = self
-            .oauth
-            .refresh(token)
-            .await
-            .map_err(|e| logged_out(&format!("{e:#}")))?;
+        let fresh = self.oauth.refresh(token).await.map_err(|e| logged_out(&format!("{e:#}")))?;
         self.tokens.replace(self.user, fresh.clone());
         Ok(fresh)
     }
@@ -139,9 +126,7 @@ fn outcome(response: &Value) -> Result<(), EditError> {
     let code = error["code"].as_str().unwrap_or_default();
     let info = error["info"].as_str().unwrap_or(code).to_string();
     Err(match code {
-        "maxlag" => EditError::Busy(Duration::from_secs(
-            error["lag"].as_f64().unwrap_or(5.0).clamp(5.0, 60.0) as u64,
-        )),
+        "maxlag" => EditError::Busy(Duration::from_secs(error["lag"].as_f64().unwrap_or(5.0).clamp(5.0, 60.0) as u64)),
         "ratelimited" => EditError::Busy(Duration::from_secs(60)),
         _ if FATAL_CODES.contains(&code) => EditError::Fatal(info),
         _ => EditError::Rejected(info),
@@ -157,34 +142,19 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn token(access: &str, expires_in: i64) -> Token {
-        Token {
-            access: Secret::from(access),
-            refresh: Some(Secret::from("R")),
-            expires_at: now() + expires_in,
-        }
+        Token { access: Secret::from(access), refresh: Some(Secret::from("R")), expires_at: now() + expires_in }
     }
 
     fn editor(url: &str, token: Token) -> Editor {
-        let config = OauthConfig {
-            client_id: "cid".into(),
-            client_secret: Secret::from("cs"),
-            callback_url: "x".into(),
-        };
+        let config =
+            OauthConfig { client_id: "cid".into(), client_secret: Secret::from("cs"), callback_url: "x".into() };
         let tokens = Arc::new(TokenCache::default());
         tokens.replace(1, token);
-        Editor::new(
-            OAuth::with_base(reqwest::Client::new(), &config, url),
-            format!("{url}/api"),
-            1,
-            tokens,
-        )
+        Editor::new(OAuth::with_base(reqwest::Client::new(), &config, url), format!("{url}/api"), 1, tokens)
     }
 
     async fn respond(server: &MockServer, matcher: impl wiremock::Match + 'static, status: u16, body: Value) {
-        Mock::given(matcher)
-            .respond_with(ResponseTemplate::new(status).set_body_json(body))
-            .mount(server)
-            .await;
+        Mock::given(matcher).respond_with(ResponseTemplate::new(status).set_body_json(body)).mount(server).await;
     }
 
     #[tokio::test]
@@ -197,13 +167,7 @@ mod tests {
             json!({"query": {"tokens": {"csrftoken": "abc+\\"}}}),
         )
         .await;
-        respond(
-            &server,
-            body_string_contains("action=wbeditentity"),
-            200,
-            json!({"success": 1}),
-        )
-        .await;
+        respond(&server, body_string_contains("action=wbeditentity"), 200, json!({"success": 1})).await;
         let mut ed = editor(&server.uri(), token("A", 3600));
         ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
         let requests = server.received_requests().await.unwrap();
@@ -221,41 +185,19 @@ mod tests {
             json!({"access_token": "B", "refresh_token": "R2", "expires_in": 14400}),
         )
         .await;
-        Mock::given(header("authorization", "Bearer A"))
-            .respond_with(ResponseTemplate::new(401))
-            .mount(&server)
+        Mock::given(header("authorization", "Bearer A")).respond_with(ResponseTemplate::new(401)).mount(&server).await;
+        respond(&server, body_string_contains("meta=tokens"), 200, json!({"query": {"tokens": {"csrftoken": "t+\\"}}}))
             .await;
-        respond(
-            &server,
-            body_string_contains("meta=tokens"),
-            200,
-            json!({"query": {"tokens": {"csrftoken": "t+\\"}}}),
-        )
-        .await;
-        respond(
-            &server,
-            body_string_contains("action=wbeditentity"),
-            200,
-            json!({"success": 1}),
-        )
-        .await;
+        respond(&server, body_string_contains("action=wbeditentity"), 200, json!({"success": 1})).await;
 
         let mut ed = editor(&server.uri(), token("A", 3600));
         ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
-        assert_eq!(
-            ed.tokens.get(1).unwrap().access.expose(),
-            "B",
-            "rejected token was refreshed"
-        );
+        assert_eq!(ed.tokens.get(1).unwrap().access.expose(), "B", "rejected token was refreshed");
 
         let mut ed = editor(&server.uri(), token("A", 10));
         ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
         let refreshed = ed.tokens.get(1).unwrap();
-        assert_eq!(
-            refreshed.refresh.unwrap().expose(),
-            "R2",
-            "expiring token was refreshed before use"
-        );
+        assert_eq!(refreshed.refresh.unwrap().expose(), "R2", "expiring token was refreshed before use");
     }
 
     #[tokio::test]
@@ -263,10 +205,7 @@ mod tests {
         let server = MockServer::start().await;
         respond(&server, path("/access_token"), 400, json!({"error": "invalid_grant"})).await;
         respond(&server, path("/api"), 401, json!({})).await;
-        let err = editor(&server.uri(), token("A", 3600))
-            .add_statements(ItemId(1), &[], "s")
-            .await
-            .unwrap_err();
+        let err = editor(&server.uri(), token("A", 3600)).add_statements(ItemId(1), &[], "s").await.unwrap_err();
         assert!(matches!(err, EditError::Fatal(m) if m.contains("log in again")));
     }
 

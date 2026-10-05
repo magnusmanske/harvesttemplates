@@ -60,24 +60,14 @@ pub trait PageSource: Send + Sync + std::fmt::Debug {
             let step = self.category_step(site, &level, namespace).await?;
             pages.extend(step.pages);
             if pages.len() > limits.max_pages {
-                bail!(
-                    "the category tree has more than {} pages; use a smaller depth",
-                    limits.max_pages
-                );
+                bail!("the category tree has more than {} pages; use a smaller depth", limits.max_pages);
             }
             if current_depth == depth {
                 break;
             }
-            level = step
-                .subcategories
-                .into_iter()
-                .filter(|c| visited.insert(c.clone()))
-                .collect();
+            level = step.subcategories.into_iter().filter(|c| visited.insert(c.clone())).collect();
             if visited.len() > limits.max_categories {
-                bail!(
-                    "the category tree has more than {} categories; use a smaller depth",
-                    limits.max_categories
-                );
+                bail!("the category tree has more than {} categories; use a smaller depth", limits.max_categories);
             }
             if level.is_empty() {
                 break;
@@ -110,21 +100,12 @@ impl PageSource for ApiSource {
         let mut pages = Vec::new();
         self.api
             .query_continue(&site.host, &p, |json| {
-                pages.extend(
-                    json["query"]["pages"]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter_map(page_from_api),
-                );
+                pages.extend(json["query"]["pages"].as_array().into_iter().flatten().filter_map(page_from_api));
                 pages.len() <= limits.max_pages
             })
             .await?;
         if pages.len() > limits.max_pages {
-            bail!(
-                "the template is used on more than {} pages; add a category filter",
-                limits.max_pages
-            );
+            bail!("the template is used on more than {} pages; add a category filter", limits.max_pages);
         }
         pages.sort_by_key(|p| std::cmp::Reverse(p.latest_revision));
         Ok(pages)
@@ -206,16 +187,10 @@ impl<P: PageSource, F: PageSource> PageSource for WithFallback<P, F> {
         depth: u32,
         limits: Limits,
     ) -> Result<HashSet<u64>> {
-        match self
-            .primary
-            .category_members(site, category, namespace, depth, limits)
-            .await
-        {
+        match self.primary.category_members(site, category, namespace, depth, limits).await {
             Err(e) if !is_limit_error(&e) => {
                 tracing::warn!("replica failed for {}, using the API: {e:#}", site.dbname);
-                self.fallback
-                    .category_members(site, category, namespace, depth, limits)
-                    .await
+                self.fallback.category_members(site, category, namespace, depth, limits).await
             }
             result => result,
         }
@@ -266,11 +241,7 @@ mod tests {
         }
     }
 
-    const LIMITS: Limits = Limits {
-        max_pages: 100,
-        max_depth: 30,
-        max_categories: 100,
-    };
+    const LIMITS: Limits = Limits { max_pages: 100, max_depth: 30, max_categories: 100 };
 
     fn graph() -> Graph {
         Graph(HashMap::from([
@@ -293,10 +264,7 @@ mod tests {
     #[tokio::test]
     async fn enforces_limits() {
         let limits = Limits { max_pages: 3, ..LIMITS };
-        let err = graph()
-            .category_members(&site(), "Root", 0, 5, limits)
-            .await
-            .unwrap_err();
+        let err = graph().category_members(&site(), "Root", 0, 5, limits).await.unwrap_err();
         assert!(is_limit_error(&err), "{err}");
     }
 }

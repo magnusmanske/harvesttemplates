@@ -10,10 +10,7 @@ use serde_json::{Value, json};
 use tower_sessions::Session;
 
 pub fn routes() -> Router<SharedState> {
-    Router::new()
-        .route("/login", get(login))
-        .route("/logout", post(logout))
-        .route("/me", get(me))
+    Router::new().route("/login", get(login)).route("/logout", post(logout)).route("/me", get(me))
 }
 
 /// The path of the registered OAuth callback URL, where [`callback`] is mounted.
@@ -83,14 +80,8 @@ mod tests {
 
     #[test]
     fn callback_paths() {
-        assert_eq!(
-            callback_path("https://harvesttemplates.toolforge.org/callback"),
-            "/callback"
-        );
-        assert_eq!(
-            callback_path("http://localhost:8000/api/auth/callback"),
-            "/api/auth/callback"
-        );
+        assert_eq!(callback_path("https://harvesttemplates.toolforge.org/callback"), "/callback");
+        assert_eq!(callback_path("http://localhost:8000/api/auth/callback"), "/api/auth/callback");
         assert_eq!(callback_path("nonsense"), "/callback");
     }
 }

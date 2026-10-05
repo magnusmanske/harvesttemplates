@@ -40,9 +40,7 @@ pub fn link_target(value: &str, allow_plain: bool, choice: LinkChoice) -> Result
 /// File name without namespace prefix, as Wikidata stores it: `Foo bar.jpg`.
 /// `prefixes` are the wiki's File namespace names and aliases.
 pub fn file_name(value: &str, prefixes: &[String]) -> Result<String, ValueError> {
-    let name = WIKILINK
-        .captures(value)
-        .map_or(value, |c| c.get(1).map_or(value, |m| m.as_str()));
+    let name = WIKILINK.captures(value).map_or(value, |c| c.get(1).map_or(value, |m| m.as_str()));
     let name = strip_namespace(name.trim(), prefixes);
     let name = urlencoding::decode(name).map_or_else(|_| name.to_string(), |d| d.into_owned());
     let name = name.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ");
@@ -54,11 +52,7 @@ pub fn file_name(value: &str, prefixes: &[String]) -> Result<String, ValueError>
 
 /// The URL of `[https://example.org label]`, or the value itself.
 pub fn url(value: &str) -> Result<String, ValueError> {
-    let url = EXTERNAL_LINK
-        .captures(value)
-        .and_then(|c| c.get(1))
-        .map_or(value, |m| m.as_str())
-        .trim();
+    let url = EXTERNAL_LINK.captures(value).and_then(|c| c.get(1)).map_or(value, |m| m.as_str()).trim();
     let is_web = url.starts_with("https://") || url.starts_with("http://");
     if !is_web || url.contains(char::is_whitespace) {
         return Err(ValueError::NotAUrl);
@@ -71,11 +65,7 @@ fn strip_namespace<'a>(name: &'a str, prefixes: &[String]) -> &'a str {
         return name;
     };
     let prefix = prefix.trim().replace('_', " ").to_lowercase();
-    if prefixes.iter().any(|p| p.to_lowercase() == prefix) {
-        rest.trim_start()
-    } else {
-        name
-    }
+    if prefixes.iter().any(|p| p.to_lowercase() == prefix) { rest.trim_start() } else { name }
 }
 
 #[cfg(test)]
@@ -84,20 +74,11 @@ mod tests {
 
     #[test]
     fn link_targets() {
-        assert_eq!(
-            link_target("[[Paris]]", false, LinkChoice::First).as_deref(),
-            Ok("Paris")
-        );
-        assert_eq!(
-            link_target("born in [[Paris]], [[France]]", false, LinkChoice::Last).as_deref(),
-            Ok("France")
-        );
+        assert_eq!(link_target("[[Paris]]", false, LinkChoice::First).as_deref(), Ok("Paris"));
+        assert_eq!(link_target("born in [[Paris]], [[France]]", false, LinkChoice::Last).as_deref(), Ok("France"));
         assert_eq!(link_target("Paris", true, LinkChoice::First).as_deref(), Ok("Paris"));
         assert_eq!(link_target("Paris", false, LinkChoice::First), Err(ValueError::NoLink));
-        assert_eq!(
-            link_target("[[Paris#History]]", false, LinkChoice::First),
-            Err(ValueError::SectionLink)
-        );
+        assert_eq!(link_target("[[Paris#History]]", false, LinkChoice::First), Err(ValueError::SectionLink));
     }
 
     #[test]
@@ -107,10 +88,7 @@ mod tests {
             ("[[File:Foo_bar.jpg]]", "Foo bar.jpg"),
             ("Datei:Foo.jpg", "Foo.jpg"),
             ("foo.jpg", "Foo.jpg"),
-            (
-                "Carduelis_spinus_2_tom_%28Marek_Szczepanek%29.jpg",
-                "Carduelis spinus 2 tom (Marek Szczepanek).jpg",
-            ), // #8
+            ("Carduelis_spinus_2_tom_%28Marek_Szczepanek%29.jpg", "Carduelis spinus 2 tom (Marek Szczepanek).jpg"), // #8
             ("Falta  _ imagen.svg", "Falta imagen.svg"), // #49
             ("[[Image:A.png]]<br/>caption", "A.png"),
         ];
@@ -122,10 +100,7 @@ mod tests {
 
     #[test]
     fn urls() {
-        assert_eq!(
-            url("[https://example.org/ Example]").as_deref(),
-            Ok("https://example.org/")
-        );
+        assert_eq!(url("[https://example.org/ Example]").as_deref(), Ok("https://example.org/"));
         assert_eq!(url("http://example.org").as_deref(), Ok("http://example.org"));
         assert_eq!(url("example.org"), Err(ValueError::NotAUrl));
     }

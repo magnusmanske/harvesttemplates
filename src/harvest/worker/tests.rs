@@ -15,33 +15,17 @@ fn spec() -> JobSpec {
         property: Some(PropertyId(345)),
         template: "IMDb title".into(),
         parameters: vec!["1".into()],
-        transform: TransformSpec {
-            add_prefix: "tt".into(),
-            ..Default::default()
-        },
+        transform: TransformSpec { add_prefix: "tt".into(), ..Default::default() },
         ..Default::default()
     }
 }
 
 fn editor(url: &str) -> Editor {
-    let config = OauthConfig {
-        client_id: "c".into(),
-        client_secret: Secret::from("s"),
-        callback_url: "x".into(),
-    };
-    let token = Token {
-        access: Secret::from("A"),
-        refresh: None,
-        expires_at: crate::storage::now() + 3600,
-    };
+    let config = OauthConfig { client_id: "c".into(), client_secret: Secret::from("s"), callback_url: "x".into() };
+    let token = Token { access: Secret::from("A"), refresh: None, expires_at: crate::storage::now() + 3600 };
     let tokens = std::sync::Arc::new(crate::auth::TokenCache::default());
     tokens.replace(OWNER, token);
-    Editor::new(
-        OAuth::with_base(reqwest::Client::new(), &config, url),
-        url.to_string(),
-        OWNER,
-        tokens,
-    )
+    Editor::new(OAuth::with_base(reqwest::Client::new(), &config, url), url.to_string(), OWNER, tokens)
 }
 
 #[tokio::test]
@@ -72,21 +56,13 @@ async fn load_preview_and_edit() {
         ]}}),
     )
     .await;
-    mock(
-        &server,
-        "meta=tokens",
-        json!({"query": {"tokens": {"csrftoken": "t+\\"}}}),
-    )
-    .await;
+    mock(&server, "meta=tokens", json!({"query": {"tokens": {"csrftoken": "t+\\"}}})).await;
     mock(&server, "action=wbeditentity", json!({"success": 1})).await;
 
     let (_db, store) = test_store().await;
     let sessions = tempfile::tempdir().unwrap();
     let app = test_app(store, &server.uri(), sessions.path());
-    let owner = Owner {
-        id: OWNER,
-        name: "Tester".into(),
-    };
+    let owner = Owner { id: OWNER, name: "Tester".into() };
     let run_id = app.store.create_run(&owner, &spec(), None).await.unwrap();
     let prepare = || Job::prepare(&app.clients, spec());
 
@@ -101,14 +77,9 @@ async fn load_preview_and_edit() {
     assert_eq!(app.store.counts(run_id).await.unwrap().pending, 1);
 
     let claim = app.runs.claim(run_id, OWNER, 2).unwrap();
-    Worker::new(app.clone(), run.clone(), prepare().await.unwrap(), Mode::Preview, claim)
-        .run()
-        .await;
+    Worker::new(app.clone(), run.clone(), prepare().await.unwrap(), Mode::Preview, claim).run().await;
     let row = &app.store.rows(run_id, None, 0, 10).await.unwrap()[0];
-    assert_eq!(
-        (row.status, row.value.as_deref()),
-        (RowStatus::Ready, Some("tt0111161"))
-    );
+    assert_eq!((row.status, row.value.as_deref()), (RowStatus::Ready, Some("tt0111161")));
     assert_eq!(app.store.run(run_id).await.unwrap().unwrap().status, RunStatus::Ready);
     assert!(
         server
@@ -121,9 +92,7 @@ async fn load_preview_and_edit() {
 
     let claim = app.runs.claim(run_id, OWNER, 2).unwrap();
     let mode = Mode::Edit(Box::new(editor(&server.uri())));
-    Worker::new(app.clone(), run, prepare().await.unwrap(), mode, claim)
-        .run()
-        .await;
+    Worker::new(app.clone(), run, prepare().await.unwrap(), mode, claim).run().await;
     let row = &app.store.rows(run_id, None, 0, 10).await.unwrap()[0];
     assert_eq!((row.status, row.item.as_deref()), (RowStatus::Done, Some("Q1")));
     let run = app.store.run(run_id).await.unwrap().unwrap();
@@ -140,8 +109,5 @@ async fn load_preview_and_edit() {
         .collect();
     assert_eq!(edits.len(), 1);
     let summary = urlencoding::decode(&edits[0].replace('+', " ")).unwrap().into_owned();
-    assert!(
-        summary.contains(&format!("editgroups/b/harvesttemplates/{}", run.editgroup)),
-        "{summary}"
-    );
+    assert!(summary.contains(&format!("editgroups/b/harvesttemplates/{}", run.editgroup)), "{summary}");
 }

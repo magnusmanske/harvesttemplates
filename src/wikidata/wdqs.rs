@@ -21,11 +21,7 @@ pub struct Wdqs {
 
 impl Wdqs {
     pub fn new(http: reqwest::Client, endpoint: &str) -> Self {
-        Self {
-            http,
-            endpoint: endpoint.to_string(),
-            permits: Arc::new(Semaphore::new(MAX_PARALLEL)),
-        }
+        Self { http, endpoint: endpoint.to_string(), permits: Arc::new(Semaphore::new(MAX_PARALLEL)) }
     }
 
     async fn query(&self, sparql: &str) -> Result<Value> {
@@ -46,9 +42,7 @@ impl Wdqs {
     pub async fn select_items(&self, sparql: &str, var: &str) -> Result<Vec<ItemId>> {
         let json = self.query(sparql).await?;
         let bindings = json["results"]["bindings"].as_array().into_iter().flatten();
-        Ok(bindings
-            .filter_map(|b| item_from_uri(b[var]["value"].as_str()?))
-            .collect())
+        Ok(bindings.filter_map(|b| item_from_uri(b[var]["value"].as_str()?)).collect())
     }
 
     /// The Wikidata item of a wiki, via "Wikimedia database name" (P1800).
@@ -63,10 +57,7 @@ impl Wdqs {
         let mut found = HashSet::new();
         for chunk in items.chunks(VALUES_CHUNK) {
             let values: Vec<String> = chunk.iter().map(|q| format!("wd:{q}")).collect();
-            let sparql = format!(
-                "SELECT ?item {{ VALUES ?item {{ {} }} ?item p:{property} [] }}",
-                values.join(" ")
-            );
+            let sparql = format!("SELECT ?item {{ VALUES ?item {{ {} }} ?item p:{property} [] }}", values.join(" "));
             found.extend(self.select_items(&sparql, "item").await?);
         }
         Ok(found)
@@ -101,11 +92,9 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(body_string_contains("p%3AP345"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(json!({"results": {"bindings": [
-                    {"item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q1"}}
-                ]}})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"results": {"bindings": [
+                {"item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q1"}}
+            ]}})))
             .expect(2)
             .mount(&server)
             .await;

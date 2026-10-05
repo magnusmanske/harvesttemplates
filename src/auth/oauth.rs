@@ -60,43 +60,28 @@ impl OAuth {
     /// Where to send the user to approve. `state` must come back unchanged.
     pub fn authorize_url(&self, state: &str) -> String {
         let (id, state) = (urlencoding::encode(&self.client_id), urlencoding::encode(state));
-        format!(
-            "{}/authorize?response_type=code&client_id={id}&state={state}",
-            self.base
-        )
+        format!("{}/authorize?response_type=code&client_id={id}&state={state}", self.base)
     }
 
     pub async fn exchange_code(&self, code: &str) -> Result<Token> {
-        self.token_request(&[("grant_type", "authorization_code"), ("code", code)])
-            .await
+        self.token_request(&[("grant_type", "authorization_code"), ("code", code)]).await
     }
 
     /// A new token from the refresh token. MediaWiki rotates refresh tokens:
     /// the old one stops working once this succeeds.
     pub async fn refresh(&self, token: &Token) -> Result<Token> {
         let refresh = token.refresh.as_ref().context("no refresh token")?;
-        self.token_request(&[("grant_type", "refresh_token"), ("refresh_token", refresh.expose())])
-            .await
+        self.token_request(&[("grant_type", "refresh_token"), ("refresh_token", refresh.expose())]).await
     }
 
     async fn token_request(&self, grant: &[(&str, &str)]) -> Result<Token> {
         let mut form = grant.to_vec();
-        form.extend([
-            ("client_id", self.client_id.as_str()),
-            ("client_secret", self.client_secret.expose()),
-        ]);
-        let response = self
-            .http
-            .post(format!("{}/access_token", self.base))
-            .form(&form)
-            .send()
-            .await?;
+        form.extend([("client_id", self.client_id.as_str()), ("client_secret", self.client_secret.expose())]);
+        let response = self.http.post(format!("{}/access_token", self.base)).form(&form).send().await?;
         let status = response.status();
         let json: Value = response.json().await.context("token response is not JSON")?;
         if !status.is_success() {
-            let reason = ["error_description", "message", "error"]
-                .iter()
-                .find_map(|k| json[k].as_str());
+            let reason = ["error_description", "message", "error"].iter().find_map(|k| json[k].as_str());
             bail!("token request refused: {}", reason.unwrap_or("unknown reason"));
         }
         let access = json["access_token"].as_str().context("no access token")?;
@@ -110,15 +95,8 @@ impl OAuth {
     /// The user's central id and name.
     pub async fn profile(&self, token: &Token) -> Result<(u64, String)> {
         let url = format!("{}/resource/profile", self.base);
-        let json: Value = self
-            .http
-            .get(url)
-            .bearer_auth(token.access.expose())
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
+        let json: Value =
+            self.http.get(url).bearer_auth(token.access.expose()).send().await?.error_for_status()?.json().await?;
         let id = json["sub"].as_u64().or_else(|| json["sub"].as_str()?.parse().ok());
         match (id, json["username"].as_str()) {
             (Some(id), Some(name)) => Ok((id, name.to_string())),
@@ -135,16 +113,9 @@ impl OAuth {
         if matches!(response.status(), StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
             return Err(CallError::Unauthorized);
         }
-        let json: Value = response
-            .error_for_status()
-            .map_err(anyhow::Error::from)?
-            .json()
-            .await
-            .map_err(anyhow::Error::from)?;
-        if json["error"]["code"]
-            .as_str()
-            .is_some_and(|c| c.starts_with("mwoauth-"))
-        {
+        let json: Value =
+            response.error_for_status().map_err(anyhow::Error::from)?.json().await.map_err(anyhow::Error::from)?;
+        if json["error"]["code"].as_str().is_some_and(|c| c.starts_with("mwoauth-")) {
             return Err(CallError::Unauthorized);
         }
         Ok(json)
@@ -159,11 +130,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     pub fn config() -> OauthConfig {
-        OauthConfig {
-            client_id: "cid".into(),
-            client_secret: Secret::from("cs"),
-            callback_url: "x".into(),
-        }
+        OauthConfig { client_id: "cid".into(), client_secret: Secret::from("cs"), callback_url: "x".into() }
     }
 
     #[test]
@@ -201,10 +168,7 @@ mod tests {
             .await;
         let oauth = OAuth::with_base(reqwest::Client::new(), &config(), &server.uri());
         let token = oauth.exchange_code("good").await.unwrap();
-        assert_eq!(
-            (token.access.expose(), token.refresh.as_ref().map(Secret::expose)),
-            ("A", Some("R"))
-        );
+        assert_eq!((token.access.expose(), token.refresh.as_ref().map(Secret::expose)), ("A", Some("R")));
         assert!(!token.is_expiring());
         assert_eq!(oauth.profile(&token).await.unwrap(), (12345, "Example".to_string()));
         let err = oauth.exchange_code("bad").await.unwrap_err().to_string();

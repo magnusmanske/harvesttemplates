@@ -70,11 +70,7 @@ impl TemplateMatcher {
         let name = normalize_spaces(name);
         let name = name.strip_prefix(':').unwrap_or(&name).trim_start();
         let name = self.strip_namespace(name);
-        if self.first_letter_case_insensitive {
-            uppercase_first(name)
-        } else {
-            name.to_string()
-        }
+        if self.first_letter_case_insensitive { uppercase_first(name) } else { name.to_string() }
     }
 
     fn strip_namespace<'a>(&self, name: &'a str) -> &'a str {
@@ -82,11 +78,7 @@ impl TemplateMatcher {
             return name;
         };
         let prefix = prefix.trim_end().to_lowercase();
-        if self.namespace_prefixes.contains(&prefix) {
-            rest.trim_start()
-        } else {
-            name
-        }
+        if self.namespace_prefixes.contains(&prefix) { rest.trim_start() } else { name }
     }
 }
 
@@ -144,10 +136,7 @@ mod tests {
     fn named_and_unnamed() {
         let t = "{{IMDb title|0111161|The Shawshank Redemption|id2=x}}";
         assert_eq!(get(&["IMDb title"], t, "1").as_deref(), Some("0111161"));
-        assert_eq!(
-            get(&["IMDb title"], t, "2").as_deref(),
-            Some("The Shawshank Redemption")
-        );
+        assert_eq!(get(&["IMDb title"], t, "2").as_deref(), Some("The Shawshank Redemption"));
         assert_eq!(get(&["IMDb title"], t, "id2").as_deref(), Some("x"));
     }
 
@@ -166,10 +155,7 @@ mod tests {
     #[test]
     fn multiline_infobox_with_nested_templates_and_links() {
         let t = "Text\n{{Infobox person\n | name = {{lang|fr|Jean}}\n | birth_place = [[Paris|the city]]\n | url = http://x.org/?a=b\n}}";
-        assert_eq!(
-            get(&["Infobox person"], t, "birth_place").as_deref(),
-            Some("[[Paris|the city]]")
-        );
+        assert_eq!(get(&["Infobox person"], t, "birth_place").as_deref(), Some("[[Paris|the city]]"));
         assert_eq!(get(&["Infobox person"], t, "name").as_deref(), Some("{{lang|fr|Jean}}"));
         assert_eq!(get(&["Infobox person"], t, "url").as_deref(), Some("http://x.org/?a=b"));
     }

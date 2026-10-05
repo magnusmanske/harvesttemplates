@@ -43,9 +43,7 @@ fn ascii_digit(c: char) -> char {
         let offset = (c as u32).checked_sub(zero as u32)?;
         (offset < 10).then(|| char::from(b'0' + offset as u8))
     });
-    block
-        .or_else(|| CJK.iter().find(|(k, _)| *k == c).map(|(_, v)| *v))
-        .unwrap_or(c)
+    block.or_else(|| CJK.iter().find(|(k, _)| *k == c).map(|(_, v)| *v)).unwrap_or(c)
 }
 
 #[cfg(test)]

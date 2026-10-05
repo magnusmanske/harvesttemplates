@@ -29,11 +29,7 @@ pub fn parse_amount(raw: &str, mark: DecimalMark) -> Result<String, ValueError> 
     let caps = NUMBER.captures(text.trim()).ok_or(ValueError::UnclearNumber)?;
     let sign = if &caps[1] == "-" { "-" } else { "+" };
     let digits = &caps[2];
-    let digits = if digits.starts_with('.') {
-        format!("0{digits}")
-    } else {
-        digits.to_string()
-    };
+    let digits = if digits.starts_with('.') { format!("0{digits}") } else { digits.to_string() };
     Ok(format!("{sign}{digits}"))
 }
 

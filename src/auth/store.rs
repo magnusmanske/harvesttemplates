@@ -88,11 +88,7 @@ mod tests {
     use time::{Duration, OffsetDateTime};
 
     fn record(expires_in: Duration) -> Record {
-        Record {
-            id: Id::default(),
-            data: Default::default(),
-            expiry_date: OffsetDateTime::now_utc() + expires_in,
-        }
+        Record { id: Id::default(), data: Default::default(), expiry_date: OffsetDateTime::now_utc() + expires_in }
     }
 
     #[tokio::test]

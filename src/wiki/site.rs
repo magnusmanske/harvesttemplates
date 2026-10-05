@@ -40,8 +40,7 @@ pub fn host_for(siteid: &str, project: &str) -> Result<String> {
 fn is_language_code(s: &str) -> bool {
     (2..=20).contains(&s.len())
         && s.starts_with(|c: char| c.is_ascii_lowercase())
-        && s.chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 /// What we need to know about a wiki, from `meta=siteinfo`.
@@ -63,11 +62,7 @@ pub struct Site {
 
 impl Site {
     pub async fn load(api: &MwApi, host: &str) -> Result<Self> {
-        let p = params(&[
-            ("action", "query"),
-            ("meta", "siteinfo"),
-            ("siprop", "general|namespaces|namespacealiases"),
-        ]);
+        let p = params(&[("action", "query"), ("meta", "siteinfo"), ("siprop", "general|namespaces|namespacealiases")]);
         Self::from_siteinfo(host, &api.get(host, &p).await?)
     }
 
@@ -75,11 +70,7 @@ impl Site {
         let query = &json["query"];
         let general = &query["general"];
         let dbname = general["wikiid"].as_str().unwrap_or_default().to_string();
-        if dbname.is_empty()
-            || !dbname
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
-        {
+        if dbname.is_empty() || !dbname.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
             return Err(anyhow!("{host} reports an invalid dbname '{dbname}'"));
         }
         let namespaces: BTreeMap<i32, String> = query["namespaces"]
@@ -138,11 +129,7 @@ impl Site {
             .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("_");
-        if namespace == NS_TEMPLATE && self.template_case_sensitive {
-            key
-        } else {
-            uppercase_first(&key)
-        }
+        if namespace == NS_TEMPLATE && self.template_case_sensitive { key } else { uppercase_first(&key) }
     }
 
     /// Redirects to a template (names without prefix), or `None` if it does not exist.
@@ -162,9 +149,7 @@ impl Site {
             exists &= page.get("missing").is_none() && page.get("invalid").is_none();
             let redirects = page["redirects"].as_array().into_iter().flatten();
             names.extend(
-                redirects
-                    .filter_map(|r| r["title"].as_str())
-                    .map(|t| self.db_key(NS_TEMPLATE, t).replace('_', " ")),
+                redirects.filter_map(|r| r["title"].as_str()).map(|t| self.db_key(NS_TEMPLATE, t).replace('_', " ")),
             );
             true
         })
@@ -220,10 +205,7 @@ mod tests {
     #[test]
     fn db_keys() {
         let site = Site::from_siteinfo("de.wikipedia.org", &siteinfo()).unwrap();
-        assert_eq!(
-            site.db_key(NS_CATEGORY, "Kategorie:deutsche  Person"),
-            "Deutsche_Person"
-        );
+        assert_eq!(site.db_key(NS_CATEGORY, "Kategorie:deutsche  Person"), "Deutsche_Person");
         assert_eq!(site.db_key(NS_CATEGORY, "Category:A b"), "A_b");
         assert_eq!(site.db_key(NS_TEMPLATE, "Vorlage:Normdaten"), "Normdaten");
         // A category whose name merely looks prefixed (talk page example) is kept whole.
