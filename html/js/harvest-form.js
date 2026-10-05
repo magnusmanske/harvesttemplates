@@ -322,6 +322,10 @@ export default {
         <input v-model.number="spec.depth" type="number" min="0" max="30" class="form-control ht-short">
         <label class="form-label mt-2">Only these pages or items</label>
         <textarea v-model.lazy="manualListText" class="form-control" rows="4" placeholder="one title or Q-id per line"></textarea>
+        <label class="form-label mt-2">Only pages in PetScan query</label>
+        <input :value="spec.petscan ?? ''" @change="spec.petscan = Number($event.target.value) || null" type="number" min="1" class="form-control" placeholder="PSID, optional">
+        <label class="form-label mt-2">Only items selected by SPARQL</label>
+        <textarea v-model.lazy="spec.sparql" class="form-control font-monospace small" rows="2" placeholder="SELECT ?item { ?item wdt:P31 wd:Q5 }"></textarea>
         <label class="form-label mt-2">Only items that are instances of</label>
         <input v-model.lazy="instanceOfText" class="form-control" placeholder="Q571, … (subclasses included)">
         <div class="form-check mt-2">

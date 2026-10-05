@@ -10,6 +10,8 @@ const FILTERS = ['', 'pending', 'ready', 'done', 'skipped', 'error'];
 const EXCLUDED_LABELS = {
   not_in_category: 'not in the category',
   not_in_list: 'not in the list',
+  not_in_petscan: 'not in the PetScan result',
+  not_in_sparql: 'not in the SPARQL result',
   no_item: 'without Wikidata item',
   not_instance: 'not instances of the classes',
   already_set: 'already have the property',

@@ -7,7 +7,7 @@ use crate::ids::ItemId;
 use crate::wiki::site::NS_CATEGORY;
 use crate::wiki::{Limits, Page, PageSource};
 use crate::wikitext::uppercase_first;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use std::collections::HashSet;
 
@@ -16,6 +16,8 @@ use std::collections::HashSet;
 pub struct Excluded {
     pub not_in_category: usize,
     pub not_in_list: usize,
+    pub not_in_petscan: usize,
+    pub not_in_sparql: usize,
     pub no_item: usize,
     pub not_instance: usize,
     /// Pre-filtered via WDQS; the live check before each edit catches the rest.
@@ -40,6 +42,19 @@ pub async fn candidates(
         let wanted = manual_list(&spec.manual_list);
         let listed = |p: &Page| wanted.contains(&p.title) || p.item.is_some_and(|q| wanted.contains(&q.to_string()));
         excluded.not_in_list = retain(&mut pages, listed);
+    }
+    if let Some(psid) = spec.petscan {
+        let result = clients.petscan.query(psid).await.with_context(|| format!("PetScan query {psid}"))?;
+        excluded.not_in_petscan = match result.wiki.as_str() {
+            wiki if wiki == job.site.dbname => retain(&mut pages, |p| result.page_ids.contains(&p.id)),
+            "wikidatawiki" => retain(&mut pages, |p| p.item.is_some_and(|q| result.titles.contains(&q.to_string()))),
+            wiki => bail!("PetScan query {psid} lists pages on {wiki}, not on {}", job.site.dbname),
+        };
+    }
+    if !spec.sparql.trim().is_empty() {
+        let items: HashSet<ItemId> =
+            clients.wdqs.select_items(&spec.sparql, "item").await.context("SPARQL query")?.into_iter().collect();
+        excluded.not_in_sparql = retain(&mut pages, |p| p.item.is_some_and(|q| items.contains(&q)));
     }
     excluded.no_item = retain(&mut pages, |p| p.item.is_some());
     if !spec.instance_of.is_empty() {

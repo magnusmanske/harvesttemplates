@@ -2,7 +2,7 @@ use crate::auth::{FileSessionStore, OAuth, TokenCache};
 use crate::config::Config;
 use crate::harvest::ActiveRuns;
 use crate::storage::Store;
-use crate::wiki::{ApiSource, Limits, MwApi, PageSource, Replicas, WithFallback};
+use crate::wiki::{ApiSource, Limits, MwApi, PageSource, PetScan, Replicas, WithFallback, petscan};
 use crate::wikidata::{Wdqs, Wikidata, wdqs};
 use anyhow::{Context, Result};
 use std::sync::Arc;
@@ -14,19 +14,30 @@ pub struct Clients {
     pub mw: MwApi,
     pub wikidata: Wikidata,
     pub wdqs: Wdqs,
+    pub petscan: PetScan,
 }
 
 impl Clients {
     pub fn new(http: &reqwest::Client) -> Self {
         let mw = MwApi::new(http.clone());
-        Self { wikidata: Wikidata { api: mw.clone() }, wdqs: Wdqs::new(http.clone(), wdqs::ENDPOINT), mw }
+        Self {
+            wikidata: Wikidata { api: mw.clone() },
+            wdqs: Wdqs::new(http.clone(), wdqs::ENDPOINT),
+            petscan: PetScan::new(http.clone(), petscan::BASE_URL),
+            mw,
+        }
     }
 
     /// Everything pointed at one mock server.
     pub fn mocked(url: &str) -> Self {
         let http = reqwest::Client::new();
         let mw = MwApi::with_base_url(http.clone(), url.to_string());
-        Self { wikidata: Wikidata { api: mw.clone() }, wdqs: Wdqs::new(http, url), mw }
+        Self {
+            wikidata: Wikidata { api: mw.clone() },
+            wdqs: Wdqs::new(http.clone(), url),
+            petscan: PetScan::new(http, url),
+            mw,
+        }
     }
 
     pub const fn services(&self) -> crate::constraints::Services<'_> {

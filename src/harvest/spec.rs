@@ -109,6 +109,10 @@ pub struct JobSpec {
     pub manual_list: Vec<String>,
     /// Only items that are instances of one of these classes or their subclasses (#145).
     pub instance_of: Vec<ItemId>,
+    /// Only pages (or items) in the result of this saved PetScan query (#71).
+    pub petscan: Option<u64>,
+    /// Only items selected as `?item` by this SPARQL query (#71).
+    pub sparql: String,
     pub skip_if: SkipIf,
     /// Constraints to check; `None` checks all. Mandatory ones are always checked.
     pub constraints: Option<Vec<ItemId>>,
@@ -147,6 +151,8 @@ impl Default for JobSpec {
             depth: 0,
             manual_list: vec![],
             instance_of: vec![],
+            petscan: None,
+            sparql: String::new(),
             skip_if: SkipIf::Property,
             constraints: None,
             qualifiers: vec![],
@@ -181,6 +187,8 @@ impl JobSpec {
                 "latparam" if !v.is_empty() => coordinate_parameters(&mut spec).latitude = v.to_string(),
                 "lonparam" if !v.is_empty() => coordinate_parameters(&mut spec).longitude = v.to_string(),
                 "pattern" => spec.value_pattern = value.clone(),
+                "petscan" => spec.petscan = v.parse().ok(),
+                "sparql" => spec.sparql = value.clone(),
                 "instanceof" => spec.instance_of = split_pipes(v).iter().filter_map(|c| c.parse().ok()).collect(),
                 "archive" => {
                     spec.archive_urls = match v {
@@ -289,6 +297,10 @@ impl JobSpec {
         }
         if !self.value_pattern.is_empty() {
             q.push(("pattern", self.value_pattern.clone()));
+        }
+        q.extend(self.petscan.map(|psid| ("petscan", psid.to_string())));
+        if !self.sparql.is_empty() {
+            q.push(("sparql", self.sparql.clone()));
         }
         if !self.instance_of.is_empty() {
             q.push(("instanceof", self.instance_of.iter().map(ItemId::to_string).collect::<Vec<_>>().join("|")));
@@ -416,6 +428,8 @@ mod tests {
         spec.unwrap_templates = true;
         spec.lead_only = true;
         spec.instance_of = vec![ItemId(571), ItemId(7725634)];
+        spec.petscan = Some(4_242);
+        spec.sparql = "SELECT ?item { ?item wdt:P31 wd:Q5 }".into();
         spec.archive_urls = ArchiveUrls::Skip;
         spec.transform.case = Case::Upper;
         spec.coordinate_parameters = Some(CoordinateParameters { latitude: "lat".into(), longitude: "long".into() });

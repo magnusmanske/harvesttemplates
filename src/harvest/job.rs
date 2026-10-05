@@ -167,6 +167,9 @@ fn check_value_source(spec: &JobSpec) -> Result<(), JobError> {
     if !spec.value_pattern.is_empty() && !(spec.value_pattern.contains('{') && spec.value_pattern.contains('}')) {
         return Err(invalid("the value pattern needs at least one {parameter}"));
     }
+    if !spec.sparql.trim().is_empty() && !spec.sparql.contains("?item") {
+        return Err(invalid("the SPARQL query must select ?item"));
+    }
     let has_source = spec.use_page_title
         || !spec.value_pattern.is_empty()
         || spec.date_parameters.is_some()
