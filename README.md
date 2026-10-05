@@ -42,4 +42,4 @@ Code style and project rules are in [CLAUDE.md](CLAUDE.md).
 
 ## License
 
-[CC0 1.0](LICENSE), like the original. Original tool by Pasleim; rewrite by Magnus Manske.
+[MIT](LICENSE). The original tool by Pasleim (and PLnode, whose month-name data is reused here) is CC0.

@@ -2,7 +2,7 @@
 name = "harvesttemplates"
 version = "0.1.0"
 edition = "2024"
-license = "CC0-1.0"
+license = "MIT"
 description = "Harvest template parameters from Wikimedia projects into Wikidata"
 repository = "https://github.com/magnusmanske/harvesttemplates"
 
