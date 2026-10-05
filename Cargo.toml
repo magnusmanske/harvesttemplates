@@ -12,6 +12,7 @@ async-trait = "0.1"
 axum = "0.8"
 base64 = "0.23"
 chrono = "0.4"
+csv = "1"
 clap = { version = "4", features = ["derive", "env"] }
 dashmap = "6"
 fancy-regex = "0.19"

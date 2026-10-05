@@ -25,5 +25,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let config = Config::load(&cli.config)?;
     let state = Arc::new(AppState::new(config)?);
+    state.store.migrate().await?;
+    state.store.recover_after_restart().await?;
     api::serve(state, cli.port).await
 }

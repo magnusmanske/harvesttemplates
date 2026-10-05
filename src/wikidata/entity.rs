@@ -118,12 +118,13 @@ impl Entity {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// Ordered from weakest to strictest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ConstraintStatus {
-    Mandatory,
-    Normal,
     Suggestion,
+    Normal,
+    Mandatory,
 }
 
 /// One "property constraint" (P2302) statement of a property.

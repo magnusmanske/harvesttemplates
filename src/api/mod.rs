@@ -2,6 +2,9 @@
 
 mod auth;
 mod error;
+mod meta;
+mod runs;
+mod shares;
 
 pub use error::{ApiError, ApiResult};
 
@@ -40,6 +43,9 @@ pub fn router(state: SharedState) -> Router {
     let api = Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .nest("/auth", auth::routes())
+        .nest("/runs", runs::routes())
+        .nest("/shares", shares::routes())
+        .merge(meta::routes())
         .layer(middleware::from_fn(same_origin_writes))
         .layer(sessions);
     let static_files = ServeDir::new(&state.config.server.html_dir);
@@ -108,6 +114,66 @@ mod tests {
             req = req.header(header::ORIGIN, o);
         }
         app.oneshot(req.body(Body::empty()).unwrap()).await.unwrap().status()
+    }
+
+    async fn call(method: Method, uri: &str, body: &str) -> (StatusCode, serde_json::Value) {
+        let sessions = tempfile::tempdir().unwrap();
+        let store = crate::storage::Store::new("mysql://nobody@127.0.0.1:1/none", 1).unwrap();
+        let app = router(crate::test_support::test_app(
+            store,
+            "http://127.0.0.1:1",
+            sessions.path(),
+        ));
+        let req = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(header::HOST, "localhost")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap_or_default())
+    }
+
+    #[tokio::test]
+    async fn endpoints_without_login() {
+        let (status, json) = call(
+            Method::GET,
+            "/api/spec/from-query?p=345&template=IMDb%20title&parameters=1",
+            "",
+        )
+        .await;
+        assert_eq!(
+            (status, json["property"].as_str(), json["parameters"][0].as_str()),
+            (StatusCode::OK, Some("P345"), Some("1"))
+        );
+        let (status, json) = call(
+            Method::POST,
+            "/api/spec/to-query",
+            r#"{"property":"P345","template":"X"}"#,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(json["query"].as_str().unwrap().contains("p=P345&template=X"));
+        assert_eq!(
+            call(Method::GET, "/api/auth/me", "").await.1,
+            serde_json::json!({"user": null})
+        );
+        let (status, json) = call(Method::POST, "/api/runs", r#"{"spec":{}}"#).await;
+        assert_eq!(
+            (status, json["error"].as_str()),
+            (StatusCode::UNAUTHORIZED, Some("not logged in"))
+        );
+        assert_eq!(
+            call(Method::POST, "/api/runs/1/start", "").await.0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            call(Method::GET, "/api/property/X1", "").await.0,
+            StatusCode::BAD_REQUEST
+        );
     }
 
     #[tokio::test]

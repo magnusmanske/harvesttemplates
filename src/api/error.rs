@@ -40,6 +40,21 @@ impl ApiError {
     }
 }
 
+impl From<crate::harvest::JobError> for ApiError {
+    fn from(e: crate::harvest::JobError) -> Self {
+        match e {
+            crate::harvest::JobError::Invalid(msg) => Self::BadRequest(msg),
+            crate::harvest::JobError::Failed(e) => Self::Internal(e),
+        }
+    }
+}
+
+impl From<crate::harvest::ClaimError> for ApiError {
+    fn from(e: crate::harvest::ClaimError) -> Self {
+        Self::TooManyRequests(e.to_string())
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let message = match &self {
