@@ -37,10 +37,25 @@ ssh -N -L 3310:enwiki.analytics.db.svc.wikimedia.cloud:3306 you@login.toolforge.
 ```
 
 **Logging in locally.** MediaWiki sends users back to the client's registered
-callback URL, which for the production client is the live tool. To log in
-locally, register a separate OAuth 2 client with callback
-`http://localhost:8000/callback` and point `oauth_file` at its file
-(e.g. `oauth.local.ini`; `oauth*.ini` is gitignored).
+callback URL, which for the production client is the live tool. Two options:
+
+- `cargo run -- --config config.json --dev-user "Your Name"` treats every
+  request as logged in. The token is fake, so previews work and edits fail.
+  The flag refuses to start on Toolforge.
+- For real edits, register a separate OAuth 2 client with callback
+  `http://localhost:8000/callback` and point `oauth_file` at its file
+  (e.g. `oauth.local.ini`; `oauth*.ini` is gitignored).
+
+To keep development runs out of the real tool database, point `tool_db` at a
+local MariaDB (with its own `db_credentials` file):
+
+```sh
+docker run -d --rm -p 3399:3306 -e MARIADB_ROOT_PASSWORD=devpw mariadb:11.3
+```
+
+**Frontend.** Edit files in `html/` and reload; nothing to build. Headless
+Chromium is handy for a quick look:
+`chromium --headless=new --window-size=1500,1000 --virtual-time-budget=10000 --screenshot=shot.png http://localhost:8000/`
 
 ## Tests
 

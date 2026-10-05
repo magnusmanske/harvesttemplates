@@ -18,9 +18,9 @@ the long-standing problems:
 - A proper template parser handles spaces, nested templates, `{{!}}` and comments.
 - One bad row is logged and skipped; it no longer stops the run.
 
-> **Status:** backend complete. Loading and preview are verified on live wikis
-> (read-only); editing is tested against mocks only so far. The web frontend is
-> next. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** feature-complete for a first release (phase 1). Loading and
+> preview are verified on live wikis; editing is tested against mocks only so
+> far. Not deployed yet. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Documentation
 

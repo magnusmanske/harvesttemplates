@@ -33,6 +33,16 @@ browser ──▶ api/ ──┬─▶ harvest/ (jobs, pipeline, workers)
 | `auth` | OAuth 2 login and token refresh, session store, `Editor` for `wbeditentity`. |
 | `storage` | All SQL. Schema in `storage/schema.sql`, applied at startup. |
 
+## Frontend
+
+`html/` is served as is: Vue 3 and Bootstrap from `tools-static.wmflabs.org`
+(Wikimedia's CDN mirror, so no third-party requests), plain ES modules, no
+build step. `app.js` routes by hash (`#/`, `#/run/ID`, `#/runs`, `#/shares`);
+each view is one file in `html/js/`. The form reads old permalinks from the
+query string via `/api/spec/from-query` and keeps its own permalink current
+via `/api/spec/to-query`, so the permalink format lives in one place (Rust).
+Styles are in `html/main.css`, grouped by `/* ==== Section ==== */`.
+
 ## A run's life
 
 ```

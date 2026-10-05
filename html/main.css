@@ -1,0 +1,81 @@
+/* ========== Layout ========== */
+:root {
+  --ht-accent: #0b7285;
+}
+
+body {
+  background: #f4f6f8;
+}
+
+.ht-header {
+  background: var(--ht-accent);
+  color: #fff;
+  padding: 0.75rem 0;
+}
+
+.ht-header a {
+  color: #fff;
+  text-decoration: none;
+}
+
+.ht-header a:hover {
+  text-decoration: underline;
+}
+
+.ht-brand {
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.ht-tagline {
+  opacity: 0.8;
+}
+
+/* ========== Form ========== */
+.ht-form .card {
+  border: 0;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+}
+
+.ht-short {
+  max-width: 6.5rem;
+}
+
+.ht-scroll {
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.ht-footer {
+  position: sticky;
+  bottom: 0;
+  padding: 0.75rem 0;
+  background: #f4f6f8;
+}
+
+/* ========== Results ========== */
+.ht-rows td {
+  vertical-align: top;
+}
+
+.ht-value {
+  font-family: var(--bs-font-monospace);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+  max-width: 22rem;
+}
+
+.ht-row-done > td { background: #e8f5e9; }
+.ht-row-ready > td { background: #e7f5fb; }
+.ht-row-error > td { background: #fdecea; }
+.ht-row-skipped > td { color: #6c757d; }
+
+/* ========== Lists ========== */
+.ht-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.ht-search {
+  max-width: 20rem;
+}

@@ -317,7 +317,9 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 - Phase 1 backend: done. Verified read-only against live enwiki/dewiki/Wikidata
   (replica and API page sources, WDQS, search, constraint checks); editing is
   tested against mocks only. Not deployed.
-- Phase 1 frontend: not started.
+- Phase 1 frontend: done (form, run view with preview/start/stop, my runs,
+  shared queries). Checked in headless Chromium against live wikis with
+  `--dev-user`; real login and edits await deployment.
 
 ### Phase 0 — Skeleton (docs first)
 - Cargo project, lint policy, `clippy.toml`, `rustfmt.toml`, CI (build, clippy `-D warnings`, `cargo test`, `cargo audit`).
