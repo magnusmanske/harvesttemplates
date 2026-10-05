@@ -5,3 +5,5 @@ sessions/
 .claude/
 replica.my.cnf
 oauth*.ini
+connect_test_db.sh
+node_modules/

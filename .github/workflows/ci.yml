@@ -22,6 +22,17 @@ jobs:
       # Docker is available on GitHub runners, so DB tests (testcontainers) run here too.
       - run: cargo test --locked
 
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Same Vue version as html/index.html loads.
+      - run: npm install --no-save @vue/compiler-dom@3.5.43
+      - run: node scripts/check-templates.mjs
+
   audit:
     runs-on: ubuntu-latest
     steps:

@@ -112,6 +112,7 @@ export default {
         notice.value = `Loaded the shared query "${share.title}" by ${share.user_name}.`;
       }
       if (params.has('htid')) notice.value = 'Shared queries from the old tool are not available here yet; please recreate it below.';
+      if (!spec.parameters.length) spec.parameters.push('');
       propertyText.value = spec.property ?? '';
       limitText.value = dateText(spec.date_limit?.date);
       ready.value = true;
@@ -232,11 +233,16 @@ export default {
             <button v-if="spec.parameters.length > 1" type="button" class="btn btn-outline-secondary" @click="spec.parameters.splice(i, 1)" title="remove">×</button>
           </div>
           <button type="button" class="btn btn-sm btn-link px-0" @click="spec.parameters.push('')">+ add alias</button>
-          <div v-if="datatype === 'globe-coordinate'" class="form-text">A nested {{coord|…}} is read. An unnamed parameter takes the following unnamed ones along, for harvesting {{coord}} itself.</div>
+          <input v-model="spec.value_pattern" class="form-control form-control-sm font-monospace mt-1" placeholder="or combine parameters: {1}-{2}">
+          <div v-if="datatype === 'globe-coordinate'" class="form-text"><span v-pre>A nested {{coord|…}} is read. An unnamed parameter takes the following unnamed ones along, for harvesting {{coord}} itself.</span></div>
         </template>
         <div class="form-check mt-1">
           <input type="checkbox" class="form-check-input" id="pagetitle" v-model="spec.use_page_title">
           <label class="form-check-label" for="pagetitle">use the page title instead</label>
+        </div>
+        <div class="form-check">
+          <input type="checkbox" class="form-check-input" id="unwrap" v-model="spec.unwrap_templates">
+          <label class="form-check-label" for="unwrap">use the content of nested templates: <code v-pre>{{URL|x}}</code> → x</label>
         </div>
 
         <template v-if="datatype === 'wikibase-item'">
@@ -284,6 +290,13 @@ export default {
           <div class="col-6"><input v-model="spec.transform.remove_suffix" class="form-control form-control-sm" placeholder="remove suffix"></div>
           <div class="col-6"><input v-model="spec.transform.search" class="form-control form-control-sm font-monospace" placeholder="regex search"></div>
           <div class="col-6"><input v-model="spec.transform.replace" class="form-control form-control-sm font-monospace" placeholder="replace ($1…)"></div>
+          <div class="col-12">
+            <select v-model="spec.transform.case" class="form-select form-select-sm" aria-label="case">
+              <option value="unchanged">keep the case</option>
+              <option value="lower">lower case</option>
+              <option value="upper">upper case</option>
+            </select>
+          </div>
         </div>
       </div></div>
     </section>
@@ -297,6 +310,10 @@ export default {
         <input v-model.number="spec.depth" type="number" min="0" max="30" class="form-control ht-short">
         <label class="form-label mt-2">Only these pages or items</label>
         <textarea v-model.lazy="manualListText" class="form-control" rows="4" placeholder="one title or Q-id per line"></textarea>
+        <div class="form-check mt-2">
+          <input type="checkbox" class="form-check-input" id="lead" v-model="spec.lead_only">
+          <label class="form-check-label" for="lead">only templates before the first heading</label>
+        </div>
         <label class="form-label mt-3">Skip items that already have</label>
         <select v-model="spec.skip_if" class="form-select">
           <option value="property">any value for the property</option>

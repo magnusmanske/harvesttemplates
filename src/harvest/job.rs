@@ -164,10 +164,14 @@ fn check_value_source(spec: &JobSpec) -> Result<(), JobError> {
     if spec.template.trim().is_empty() {
         return Err(invalid("choose a template"));
     }
+    if !spec.value_pattern.is_empty() && !(spec.value_pattern.contains('{') && spec.value_pattern.contains('}')) {
+        return Err(invalid("the value pattern needs at least one {parameter}"));
+    }
     let has_source = spec.use_page_title
+        || !spec.value_pattern.is_empty()
         || spec.date_parameters.is_some()
         || spec.coordinate_parameters.is_some()
-        || !spec.parameters.is_empty();
+        || spec.parameters.iter().any(|p| !p.trim().is_empty());
     if !has_source {
         return Err(invalid("choose a template parameter"));
     }

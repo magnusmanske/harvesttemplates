@@ -7,14 +7,19 @@ message a user can see in the results table.
 
 1. **Item**: the page must be linked to a Wikidata item.
 2. **Template**: the first transclusion of the template or an accepted redirect,
-   in document order. Comments and `<ref>…</ref>` are ignored.
+   in document order. Comments and `<ref>…</ref>` are ignored. Optionally only
+   before the first section heading, where infoboxes about the subject live.
 3. **Parameter**: the first listed parameter with a non-empty value. Unnamed
-   parameters are `1`, `2`, … Alternatively the page title, or separate
-   year/month/day parameters for dates.
-4. **Clean**: nested templates removed, `[[target|label]]` → `[[target]]`,
+   parameters are `1`, `2`, … Alternatively the page title, separate
+   year/month/day or latitude/longitude parameters, or a pattern combining
+   parameters such as `{1}-{2}`.
+4. **Clean**: nested templates removed (or, optionally, replaced by their first
+   unnamed parameter: `{{URL|x}}` → `x`), `[[target|label]]` → `[[target]]`,
    bold/italic and `&nbsp;` removed, whitespace collapsed, `{{!}}` handled.
-5. **Transform**: add prefix/suffix, remove prefix/suffix (literal), then the
-   regex search/replace (Rust `regex` syntax; `$1` works as in JavaScript).
+   A value of punctuation alone counts as no value.
+5. **Transform**: add prefix/suffix, remove prefix/suffix (literal), the regex
+   search/replace (Rust `regex` syntax; `$1` works as in JavaScript), then
+   lower or upper case if chosen.
 6. **Parse** by datatype (below).
 7. **Qualifiers**: each one is a fixed value (checked when the run is created)
    or another parameter of the same transclusion, parsed by the qualifier

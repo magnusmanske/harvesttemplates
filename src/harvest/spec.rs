@@ -2,7 +2,7 @@
 //! to and from the original tool's permalink query string.
 
 use crate::ids::{ItemId, PropertyId};
-use crate::value::{Calendar, Date, DateLimit, DecimalMark, LinkChoice, Relation, TransformSpec};
+use crate::value::{Calendar, Case, Date, DateLimit, DecimalMark, LinkChoice, Relation, TransformSpec};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -82,8 +82,14 @@ pub struct JobSpec {
     pub parameters: Vec<String>,
     pub date_parameters: Option<DateParameters>,
     pub coordinate_parameters: Option<CoordinateParameters>,
-    /// Use the page title as the value instead of a parameter.
+    /// Use the page title instead of a parameter.
     pub use_page_title: bool,
+    /// Combine parameters, e.g. `{1}-{2}` (#52). Replaces `parameters` when set.
+    pub value_pattern: String,
+    /// Keep the first unnamed parameter of nested templates: `{{URL|x}}` → `x` (#2).
+    pub unwrap_templates: bool,
+    /// Only look before the first section heading (#122).
+    pub lead_only: bool,
     pub transform: TransformSpec,
     /// Items: accept a value without `[[link]]` syntax as a page title.
     pub plain_links: bool,
@@ -121,6 +127,9 @@ impl Default for JobSpec {
             date_parameters: None,
             coordinate_parameters: None,
             use_page_title: false,
+            value_pattern: String::new(),
+            unwrap_templates: false,
+            lead_only: false,
             transform: TransformSpec::default(),
             plain_links: true,
             link_choice: LinkChoice::First,
@@ -165,6 +174,16 @@ impl JobSpec {
                 }
                 "latparam" if !v.is_empty() => coordinate_parameters(&mut spec).latitude = v.to_string(),
                 "lonparam" if !v.is_empty() => coordinate_parameters(&mut spec).longitude = v.to_string(),
+                "pattern" => spec.value_pattern = value.clone(),
+                "unwrap" => spec.unwrap_templates = v == "1",
+                "lead" => spec.lead_only = v == "1",
+                "case" => {
+                    spec.transform.case = match v {
+                        "lower" => Case::Lower,
+                        "upper" => Case::Upper,
+                        _ => Case::Unchanged,
+                    }
+                }
                 "pagetitle" => spec.use_page_title = v == "1",
                 "addprefix" | "prefix" => spec.transform.add_prefix = value.clone(),
                 "addsuffix" => spec.transform.add_suffix = value.clone(),
@@ -253,6 +272,19 @@ impl JobSpec {
         q.push(("wikisyntax", bit(self.plain_links)));
         if self.use_page_title {
             q.push(("pagetitle", "1".into()));
+        }
+        if !self.value_pattern.is_empty() {
+            q.push(("pattern", self.value_pattern.clone()));
+        }
+        for (key, on) in [("unwrap", self.unwrap_templates), ("lead", self.lead_only)] {
+            if on {
+                q.push((key, "1".into()));
+            }
+        }
+        match t.case {
+            Case::Unchanged => {}
+            Case::Lower => q.push(("case", "lower".into())),
+            Case::Upper => q.push(("case", "upper".into())),
         }
         if self.link_choice == LinkChoice::Last {
             q.push(("link", "last".into()));
@@ -358,6 +390,10 @@ mod tests {
         );
         spec.manual_list = vec!["Page one".into(), "Q42".into()];
         spec.link_choice = LinkChoice::Last;
+        spec.value_pattern = "{1}-{2}".into();
+        spec.unwrap_templates = true;
+        spec.lead_only = true;
+        spec.transform.case = Case::Upper;
         spec.coordinate_parameters = Some(CoordinateParameters { latitude: "lat".into(), longitude: "long".into() });
         spec.qualifiers = vec![
             QualifierSpec { property: PropertyId(407), source: QualifierSource::Fixed { value: "Q1860".into() } },

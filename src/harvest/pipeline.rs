@@ -10,8 +10,10 @@ use crate::value::{self, Datatype, Date, Value, ValueError};
 use crate::wiki::Page;
 use crate::wiki::content::{self, FileLocation, LinkTarget, Revision};
 use crate::wikidata::{Entity, Qualifier, Source, statement};
-use crate::wikitext::{TemplateParams, clean_value};
+use crate::wikitext::{TemplateParams, clean_value_with, lead_section};
+use regex::Regex;
 use serde_json::Value as Json;
+use std::sync::LazyLock;
 
 /// Nothing to do (`Skip`), or something is wrong with the value (`Error`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,7 +121,9 @@ struct Found {
 }
 
 fn extract(job: &Job, page: &Page, wikitext: &str) -> Result<Found, Rejection> {
-    let params = job.matcher.find(wikitext);
+    let spec = &job.spec;
+    let params = job.matcher.find(if spec.lead_only { lead_section(wikitext) } else { wikitext });
+    let clean = |raw: &str| clean_value_with(raw, spec.unwrap_templates);
     if job.spec.use_page_title {
         let prefix = job.site.namespaces.get(&job.spec.namespace).map(|ns| format!("{ns}:"));
         let title = prefix.and_then(|p| page.title.strip_prefix(&p)).unwrap_or(&page.title);
@@ -127,20 +131,36 @@ fn extract(job: &Job, page: &Page, wikitext: &str) -> Result<Found, Rejection> {
     }
     let p = params.as_ref().ok_or_else(|| skip("template not found"))?;
     let raw = if let Some(dp) = &job.spec.date_parameters {
-        let get = |name: &Option<String>| name.as_deref().and_then(|n| p.get(n)).map(clean_value);
-        let year = p.get(&dp.year).map(clean_value).ok_or_else(|| skip("no value"))?;
+        let get = |name: &Option<String>| name.as_deref().and_then(|n| p.get(n)).map(clean);
+        let year = p.get(&dp.year).map(clean).ok_or_else(|| skip("no value"))?;
         RawValue::DateParts { year, month: get(&dp.month), day: get(&dp.day) }
     } else if let Some(cp) = &job.spec.coordinate_parameters {
         let get = |name: &str| p.get(name).map(str::to_string).ok_or_else(|| skip("no value"));
         RawValue::CoordinateParts { latitude: get(&cp.latitude)?, longitude: get(&cp.longitude)? }
+    } else if !spec.value_pattern.is_empty() {
+        RawValue::Text(fill_pattern(&spec.value_pattern, p, &clean).ok_or_else(|| skip("no value"))?)
     } else if job.datatype == Datatype::GlobeCoordinate {
         RawValue::Text(coordinate_text(p, &job.spec.parameters).ok_or_else(|| skip("no value"))?)
     } else {
-        let raw = p.first_of(job.spec.parameters.iter().map(String::as_str)).ok_or_else(|| skip("no value"))?;
-        RawValue::Text(clean_value(raw))
+        let raw = p.first_of(job.spec.parameters.iter().map(String::as_str)).map(clean);
+        // Before any transform: "add prefix" must not turn nothing into something.
+        RawValue::Text(raw.filter(|r| !r.is_empty()).ok_or_else(|| skip("no value"))?)
     };
     Ok(Found { raw, params })
 }
+
+/// `{1}-{2}` with each placeholder replaced by that (cleaned) parameter; `None` if one is missing.
+fn fill_pattern(pattern: &str, params: &TemplateParams, clean: &impl Fn(&str) -> String) -> Option<String> {
+    let mut complete = true;
+    let filled = PLACEHOLDER.replace_all(pattern, |caps: &regex::Captures| {
+        let value = params.get(&caps[1]).map(clean).filter(|v| !v.is_empty());
+        complete &= value.is_some();
+        value.unwrap_or_default()
+    });
+    complete.then(|| filled.into_owned())
+}
+
+static PLACEHOLDER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\{([^{}]+)\}").unwrap());
 
 /// The raw (uncleaned) value, so a nested `{{coord}}` survives. An unnamed
 /// parameter brings the following unnamed ones along: `{{coord|52|31|N|13|24|E}}`.
@@ -216,7 +236,8 @@ async fn qualifiers(
         let value = match &q.source {
             PreparedSource::Fixed(value) => value.clone(),
             PreparedSource::Parameter(names) => {
-                let raw = params.and_then(|p| p.first_of(names.iter().map(String::as_str))).map(clean_value);
+                let raw = params.and_then(|p| p.first_of(names.iter().map(String::as_str)));
+                let raw = raw.map(|r| clean_value_with(r, job.spec.unwrap_templates));
                 let Some(text) = raw.filter(|t| !t.is_empty()) else { continue };
                 let parsed = parse_as(job, clients, q.datatype, None, text, item).await;
                 parsed.map_err(|r| match r {

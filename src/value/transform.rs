@@ -12,6 +12,16 @@ pub struct TransformSpec {
     pub remove_suffix: String,
     pub search: String,
     pub replace: String,
+    pub case: Case,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Case {
+    #[default]
+    Unchanged,
+    Lower,
+    Upper,
 }
 
 #[derive(Debug, Clone)]
@@ -37,9 +47,14 @@ impl Transform {
         let value = format!("{}{value}{}", s.add_prefix, s.add_suffix);
         let value = value.strip_prefix(s.remove_prefix.as_str()).unwrap_or(&value);
         let value = value.strip_suffix(s.remove_suffix.as_str()).unwrap_or(value);
-        match &self.search {
+        let value = match &self.search {
             Some(re) => re.replace_all(value, js_replacement(&s.replace)).into_owned(),
             None => value.to_string(),
+        };
+        match s.case {
+            Case::Unchanged => value,
+            Case::Lower => value.to_lowercase(),
+            Case::Upper => value.to_uppercase(),
         }
     }
 }
@@ -86,6 +101,14 @@ mod tests {
     fn regex_replace_with_js_groups() {
         let spec = TransformSpec { search: r"^(\d+)-(\d+)$".into(), replace: "$2a$1".into(), ..Default::default() };
         assert_eq!(transform(spec, "12-34"), "34a12");
+    }
+
+    #[test]
+    fn case() {
+        let spec = TransformSpec { case: Case::Lower, ..Default::default() };
+        assert_eq!(transform(spec, "ÉCOLE"), "école");
+        let spec = TransformSpec { search: "^x".into(), replace: "a".into(), case: Case::Upper, ..Default::default() };
+        assert_eq!(transform(spec, "xyz"), "AYZ", "case comes last");
     }
 
     #[test]

@@ -259,3 +259,34 @@ async fn coordinates_from_nested_and_direct_templates() {
     assert_eq!(at(parts.clone(), "{{X|lat=-33.86|lon=151.21}}").await, Ok("-33.86, 151.21".to_string()));
     assert_eq!(at(parts, "{{X|lat=-33.86}}").await, Err(skip("no value")));
 }
+
+#[tokio::test]
+async fn patterns_unwrapping_and_lead_section() {
+    let (_server, clients) = world().await;
+    let base = JobSpec {
+        property: Some(PropertyId(345)),
+        template: "IMDb title".into(),
+        parameters: vec!["id".into()],
+        transform: TransformSpec { add_prefix: "tt".into(), ..Default::default() },
+        ..Default::default()
+    };
+    let at = |spec: JobSpec, text: &'static str| {
+        let clients = &clients;
+        async move {
+            let job = Job::prepare(clients, spec).await.unwrap();
+            evaluate(&job, clients, &page(Some(1)), &revision(text)).await.result.map(|e| e.value.display())
+        }
+    };
+    // #52: combine parameters
+    let pattern = JobSpec { value_pattern: "{1}{2}".into(), ..base.clone() };
+    assert_eq!(at(pattern.clone(), "{{IMDb title|01111|61}}").await, Ok("tt0111161".into()));
+    assert_eq!(at(pattern, "{{IMDb title|01111}}").await, Err(skip("no value")));
+    // #2: the content of a nested template
+    let nested = "{{IMDb title|id={{nowrap|0111161}}}}";
+    assert_eq!(at(base.clone(), nested).await, Err(skip("no value")));
+    assert_eq!(at(JobSpec { unwrap_templates: true, ..base.clone() }, nested).await, Ok("tt0111161".into()));
+    // #122: ignore templates below the first heading
+    let below = "{{Infobox}}\n== Cast ==\n{{IMDb title|id=0111161}}";
+    assert_eq!(at(base.clone(), below).await, Ok("tt0111161".into()));
+    assert_eq!(at(JobSpec { lead_only: true, ..base }, below).await, Err(skip("template not found")));
+}

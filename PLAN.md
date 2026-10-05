@@ -271,7 +271,7 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 | 208, 193, talk page | Loading hangs | 1 | Design (D2–D4), caps + progress |
 | 211 | Duplicate values | 1 | Design (D4) |
 | 209, 207 | Run aborts on bad rows | 1 | Design (§3.4) |
-| 204, 132, 2/91, 32 | Template parsing | 1 | Design (D5); #2 via "unwrap inner template" option in phase 2 |
+| 204, 132, 2/91, 32 | Template parsing | 1 ✓ | Design (D5); #2 via the "unwrap nested templates" option (phase 2 ✓) |
 | 178 | Unit leaks from permalink | 1 | Spec validation rejects unit not in allowed set |
 | 175 | Better edit summary | 1 | D7 |
 | 142, 140 | Browser-driven runs | 1 | Design (D1/D2) |
@@ -288,13 +288,13 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 | 136, 15 | Unit suffix in quantity | 2 ✓ | Match unit label/alias/symbol |
 | 135 | Calendar switch date | 2 | Full date instead of year |
 | 130 | Archive URLs | 2 | Detect `web.archive.org`, option: skip / extract original |
-| 70, 147, 52 | Case, separators, split/join | 2 | `transform.rs`: case, split‑on, value pattern `{{1}}-{{2}}` |
+| 70, 147, 52 | Case, separators, split/join | 2 ✓ | case option; value pattern `{1}-{2}`; punctuation alone counts as no value |
 | 149 | Last link instead of first | 2 | Option |
 | 172 | Formatter‑URL links in table | 2 | Use P1630 |
 | 145 | Limit to instances of X | 2 | Batched VDQS filter on candidates |
 | 71 | SPARQL / PetScan source | 2 | `PageSource::PetScan` (id) and `::Sparql` |
 | 174 | Tags for shares | 2 | `share_tag` |
-| 122 | Ignore templates far down | 2 | Option: first N chars / first occurrence only |
+| 122 | Ignore templates far down | 2 ✓ | Option: lead section only |
 | 56 | `wbparsevalue` | 2 | Use as validator/fallback for time & quantity |
 | 118 | testwikis | 3 | Repo from `meta=wikibase`; parametrise Wikidata URLs |
 | 206, 108, 111 | Multi‑wiki / multi‑template / multi‑property | 3 | Spec becomes a list; pipeline already per (page, property) |
