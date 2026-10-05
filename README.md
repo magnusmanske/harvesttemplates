@@ -18,9 +18,10 @@ the long-standing problems:
 - A proper template parser handles spaces, nested templates, `{{!}}` and comments.
 - One bad row is logged and skipped; it no longer stops the run.
 
-> **Status:** feature-complete for a first release (phase 1). Loading and
-> preview are verified on live wikis; editing is tested against mocks only so
-> far. Not deployed yet. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** phases 1 and 2 of [the plan](PLAN.md) are done: everything the
+> original did, plus qualifiers, coordinates, units, PetScan/SPARQL filters and
+> more. Loading and preview are verified on live wikis; editing is tested
+> against mocks only so far. Not deployed yet.
 
 ## Documentation
 

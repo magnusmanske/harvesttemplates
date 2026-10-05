@@ -64,6 +64,7 @@ cargo test                                  # all fast tests; DB tests need Dock
 cargo test -- --ignored                     # live tests: real wikis, replicas via config.json; read-only
 cargo clippy --all-targets -- -D warnings
 cargo fmt
+npm install --no-save @vue/compiler-dom@3.5.43 && node scripts/check-templates.mjs   # Vue templates
 ```
 
 - Pure logic (wikitext, values, specs) has table-driven unit tests; GitHub

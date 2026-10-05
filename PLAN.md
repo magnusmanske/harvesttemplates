@@ -320,6 +320,10 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 - Phase 1 frontend: done (form, run view with preview/start/stop, my runs,
   shared queries). Checked in headless Chromium against live wikis with
   `--dev-user`; real login and edits await deployment.
+- Phase 2 (2026-10-06): done — qualifiers, unit suffixes, coordinates, value
+  patterns / nested templates / case / lead section, archive URLs, value links,
+  instance-of, PetScan and SPARQL filters, share tags, Wikibase date fallback.
+  Not done: #133's "harvested value as a qualifier on a fixed main value".
 
 ### Phase 0 — Skeleton (docs first)
 - Cargo project, lint policy, `clippy.toml`, `rustfmt.toml`, CI (build, clippy `-D warnings`, `cargo test`, `cargo audit`).
