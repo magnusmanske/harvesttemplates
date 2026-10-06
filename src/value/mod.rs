@@ -163,6 +163,38 @@ impl Value {
         }
     }
 
+    /// How Wikidata's edit summaries write this value, e.g. `[[Q42]]` or
+    /// `2 February 1928`. `None` where we cannot reproduce it reliably.
+    pub fn summary_text(&self) -> Option<String> {
+        const MONTHS: [&str; 12] = [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ];
+        match self {
+            Self::Item(q) => Some(format!("[[{q}]]")),
+            Self::String(s) | Self::Monolingual { text: s, .. } => Some(s.clone()),
+            Self::Time { date, calendar: Calendar::Gregorian } => {
+                let month = usize::from(date.month).checked_sub(1).and_then(|i| MONTHS.get(i));
+                Some(match (month, date.day) {
+                    (Some(m), 0) => format!("{m} {}", date.year),
+                    (Some(m), d) => format!("{d} {m} {}", date.year),
+                    (None, _) => date.year.to_string(),
+                })
+            }
+            _ => None,
+        }
+    }
+
     /// Short human-readable form for the results table.
     pub fn display(&self) -> String {
         match self {

@@ -49,6 +49,8 @@ template are listed; untick the ones that mean something else.
 PetScan query ID, a SPARQL query selecting `?item`, classes the items must be
 instances of, templates before the first heading only, and whether to skip
 items that already have *any* value for the property or only *this exact* one.
+Values that someone removed from an item before are not added again, unless you
+untick that option.
 
 **Check constraints**: the property's constraints. Mandatory ones are always
 checked; untick others you want to ignore.

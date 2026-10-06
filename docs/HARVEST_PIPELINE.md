@@ -27,8 +27,12 @@ message a user can see in the results table.
    leaves that qualifier out; an unusable one rejects the row.
 8. **Existing values**: on the live item. The exact value (or a more precise
    date) is always skipped; with "skip items with property set", any value is.
-9. **Constraints**: the selected ones plus all mandatory ones. See `CONSTRAINTS.md`.
-10. **Edit**: one `wbeditentity` with references *imported from* (P143, the
+9. **Earlier removals** (on by default): if the item's latest 500 edit
+   summaries show this value being removed from the property, it is not added
+   again. Works for items, strings, IDs, URLs, files, monolingual text and
+   Gregorian dates; quantities and coordinates are not checked.
+10. **Constraints**: the selected ones plus all mandatory ones. See `CONSTRAINTS.md`.
+11. **Edit**: one `wbeditentity` with references *imported from* (P143, the
    wiki's item) and *Wikimedia import URL* (P4656, the exact revision).
 
 ## Datatypes
@@ -83,6 +87,7 @@ To add a language, add its month names to `data/monthnames.json`.
 | error | an archived copy without the original URL | |
 | error | could not find a coordinate | |
 | error | the item does not exist | deleted item |
+| skipped | this value was removed from the item before | someone deleted it; respect that |
 | error | constraint violation: *name* | |
 | error | qualifier P…: *reason* | a qualifier parameter could not be parsed |
 | error | lookup failed: … | network problem; the row can be retried |

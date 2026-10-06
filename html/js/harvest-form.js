@@ -337,6 +337,10 @@ export default {
           <option value="property">any value for the property</option>
           <option value="value">this exact value</option>
         </select>
+        <div class="form-check mt-2">
+          <input type="checkbox" class="form-check-input" id="removed" v-model="spec.skip_removed">
+          <label class="form-check-label" for="removed">skip values someone removed from the item before</label>
+        </div>
       </div></div>
     </section>
 

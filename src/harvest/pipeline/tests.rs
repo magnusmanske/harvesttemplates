@@ -323,3 +323,28 @@ async fn dates_fall_back_to_wikibase_parser() {
     assert_eq!(eval("{{X|born=unknown}}").await, Err(error("could not find a date")));
     assert_eq!(eval("{{X|born=c. 1950}}").await, Err(error("imprecise date")), "our rejections are final");
 }
+
+#[tokio::test]
+async fn removed_values_are_not_re_added() {
+    use crate::test_support::mock;
+    let (server, clients) = world().await;
+    mock(
+        &server,
+        "rvprop=comment",
+        serde_json::json!({"query": {"pages": [{"revisions": [
+            {"comment": "/* wbremoveclaims-remove:1| */ [[Property:P345]]: tt0111161, wrong film"},
+            {"comment": "/* wbsetclaim-create:2||1 */ [[Property:P345]]: tt0111161"}
+        ]}]}}),
+    )
+    .await;
+    let job = imdb_job(&clients).await;
+    let removed = evaluate(&job, &clients, &page(Some(1)), &revision("{{IMDb title|0111161}}")).await;
+    assert_eq!(removed.result.unwrap_err(), skip("this value was removed from the item before"));
+    let other = evaluate(&job, &clients, &page(Some(1)), &revision("{{IMDb title|0111162}}")).await;
+    assert!(other.result.is_ok(), "only that value");
+    let job = Job::prepare(&clients, JobSpec { skip_removed: false, ..job.spec.clone() }).await.unwrap();
+    assert!(
+        evaluate(&job, &clients, &page(Some(1)), &revision("{{IMDb title|0111161}}")).await.result.is_ok(),
+        "can be turned off"
+    );
+}

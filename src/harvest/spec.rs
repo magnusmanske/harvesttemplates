@@ -114,6 +114,8 @@ pub struct JobSpec {
     /// Only items selected as `?item` by this SPARQL query (#71).
     pub sparql: String,
     pub skip_if: SkipIf,
+    /// Skip values that were removed from the item before (#89).
+    pub skip_removed: bool,
     /// Constraints to check; `None` checks all. Mandatory ones are always checked.
     pub constraints: Option<Vec<ItemId>>,
     pub qualifiers: Vec<QualifierSpec>,
@@ -154,6 +156,7 @@ impl Default for JobSpec {
             petscan: None,
             sparql: String::new(),
             skip_if: SkipIf::Property,
+            skip_removed: true,
             constraints: None,
             qualifiers: vec![],
         }
@@ -232,6 +235,7 @@ impl JobSpec {
                 }
                 "alreadyset" | "set" if v == "0" => spec.skip_if = SkipIf::Value,
                 "skipif" if v == "value" => spec.skip_if = SkipIf::Value,
+                "skipremoved" => spec.skip_removed = v != "0",
                 "constraints" => {
                     spec.constraints = Some(split_pipes(v).iter().filter_map(|c| c.parse().ok()).collect());
                 }
@@ -292,6 +296,9 @@ impl JobSpec {
         }
         q.push(("alreadyset", bit(self.skip_if == SkipIf::Property)));
         q.push(("wikisyntax", bit(self.plain_links)));
+        if !self.skip_removed {
+            q.push(("skipremoved", "0".into()));
+        }
         if self.use_page_title {
             q.push(("pagetitle", "1".into()));
         }
@@ -442,6 +449,7 @@ mod tests {
         spec.value_pattern = "{1}-{2}".into();
         spec.unwrap_templates = true;
         spec.lead_only = true;
+        spec.skip_removed = false;
         spec.instance_of = vec![ItemId(571), ItemId(7725634)];
         spec.petscan = Some(4_242);
         spec.sparql = "SELECT ?item { ?item wdt:P31 wd:Q5 }".into();

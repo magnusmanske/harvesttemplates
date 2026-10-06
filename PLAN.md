@@ -298,7 +298,7 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 | 56 | `wbparsevalue` | 2 ✓ | Fallback for dates (quantities: Wikibase's parser does not read units, so no gain) |
 | 118 | testwikis | 3 | Repo from `meta=wikibase`; parametrise Wikidata URLs |
 | 206, 108, 111 | Multi‑wiki / multi‑template / multi‑property | 3 | Spec becomes a list; pipeline already per (page, property) |
-| 89 | History check | 3 | Optional: scan last N summaries for a removed identical value |
+| 89 | History check | 3 ✓ | Last 500 summaries scanned for a removal of the same value; on by default |
 | 53 | Commons linking | 3 | Via `wikibase_item` on Commons categories / P1472 |
 | 146 | Voting on shares | 3 | Maybe; low value vs. complexity |
 | 43 | i18n | 3 | ToolTranslate, UI strings only |

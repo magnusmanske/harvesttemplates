@@ -88,6 +88,28 @@ impl Wikidata {
         Ok(out)
     }
 
+    /// Was `value` removed from `property` of this item before (#89)? Looks for
+    /// `wbremoveclaims` in the latest 500 edit summaries. Unknown (`false`) for
+    /// values whose summary form we cannot reproduce.
+    pub async fn was_removed(&self, item: ItemId, property: PropertyId, value: &Value) -> Result<bool> {
+        let Some(text) = value.summary_text() else { return Ok(false) };
+        let id = item.to_string();
+        let p = params(&[
+            ("action", "query"),
+            ("prop", "revisions"),
+            ("titles", &id),
+            ("rvprop", "comment"),
+            ("rvlimit", "max"),
+        ]);
+        let json = self.api.get(HOST, &p).await?;
+        let revisions = json["query"]["pages"][0]["revisions"].as_array().cloned().unwrap_or_default();
+        let needle = format!("[[Property:{property}]]: {text}");
+        Ok(revisions
+            .iter()
+            .filter_map(|r| r["comment"].as_str())
+            .any(|c| c.contains("wbremoveclaims-remove") && mentions(c, &needle)))
+    }
+
     /// A date via Wikibase's own parser (`wbparsevalue`), which knows MediaWiki's
     /// month names in every language (#56). `None` if it cannot parse the text,
     /// or only to decade or century precision.
@@ -112,6 +134,12 @@ impl Wikidata {
             })
             .collect())
     }
+}
+
+/// `needle` occurs in `text`, followed by its end or a separator (so `tt1` does not match `tt12`).
+fn mentions(text: &str, needle: &str) -> bool {
+    text.match_indices(needle)
+        .any(|(i, _)| text[i + needle.len()..].chars().next().is_none_or(|c| matches!(c, ',' | ' ' | ';')))
 }
 
 /// An item with its statements.
@@ -290,6 +318,35 @@ mod tests {
         let statuses: Vec<_> = info.constraints.iter().map(|c| c.status).collect();
         assert_eq!(statuses, [ConstraintStatus::Mandatory, ConstraintStatus::Normal, ConstraintStatus::Suggestion]);
         assert_eq!(info.constraint(ItemId(21_502_404)).unwrap().first_string(PropertyId(1793)), Some("tt\\d+"));
+    }
+
+    #[test]
+    fn removal_summaries() {
+        let removal = "/* wbremoveclaims-remove:1| */ [[Property:P345]]: tt12";
+        assert!(mentions(removal, "[[Property:P345]]: tt12"));
+        assert!(!mentions(removal, "[[Property:P345]]: tt1"), "a prefix of another value");
+        assert!(mentions(
+            "/* wbremoveclaims-remove:1| */ [[Property:P19]]: [[Q90]], wrong place",
+            "[[Property:P19]]: [[Q90]]"
+        ));
+        let date = |year, month, day| Value::Time {
+            date: crate::value::Date { year, month, day },
+            calendar: crate::value::Calendar::Gregorian,
+        };
+        assert_eq!(date(1928, 2, 2).summary_text().as_deref(), Some("2 February 1928"));
+        assert_eq!(date(1928, 2, 0).summary_text().as_deref(), Some("February 1928"));
+        assert_eq!(date(1928, 0, 0).summary_text().as_deref(), Some("1928"));
+        assert_eq!(Value::Item(ItemId(5)).summary_text().as_deref(), Some("[[Q5]]"));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires database / external services — run with cargo test -- --ignored"]
+    async fn live_removal_is_found() {
+        let http = crate::app_state::http_client("HarvestTemplates tests (https://harvesttemplates.toolforge.org)").unwrap();
+        let wikidata = Wikidata { api: MwApi::new(http) };
+        let isni = |s: &str| Value::String(s.to_string());
+        assert!(wikidata.was_removed(ItemId(5_716_580), PropertyId(213), &isni("0000000116716546")).await.unwrap());
+        assert!(!wikidata.was_removed(ItemId(5_716_580), PropertyId(213), &isni("0000000000000000")).await.unwrap());
     }
 
     #[test]

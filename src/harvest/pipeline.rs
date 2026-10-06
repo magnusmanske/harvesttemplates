@@ -89,6 +89,11 @@ async fn steps(
     if let Some(name) = first_violation(&defs, &candidate, clients.services()).await.map_err(failed)? {
         return Err(error(format!("constraint violation: {name}")));
     }
+    if job.spec.skip_removed
+        && clients.wikidata.was_removed(entity.id, job.property.id, &value).await.map_err(failed)?
+    {
+        return Err(skip("this value was removed from the item before"));
+    }
     let source = Source::new(job.site.edition, &job.site.host, &page.title, revision.id);
     let statement = statement(job.property.id, job.datatype, &value, &qualifiers, &source);
     Ok(PlannedEdit { item: entity.id, value, statement })

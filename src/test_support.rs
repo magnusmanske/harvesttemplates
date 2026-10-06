@@ -132,6 +132,12 @@ pub async fn world() -> (MockServer, Clients) {
         .with_priority(10)
         .mount(&server)
         .await;
+    // No earlier removals in any item's history, unless a test says otherwise.
+    Mock::given(body_string_contains("rvprop=comment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({"query": {"pages": [{"revisions": []}]}})))
+        .with_priority(10)
+        .mount(&server)
+        .await;
     let clients = Clients::mocked(&server.uri());
     (server, clients)
 }

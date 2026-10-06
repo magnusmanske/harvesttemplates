@@ -78,7 +78,7 @@ Row status: `pending`, `ready` (previewed, would be added), `done`, `skipped`, `
 All fields are optional; the defaults are shown. `template_redirects: null`
 accepts every redirect; `constraints: null` checks every supported constraint.
 `date_parameters` is `{"year": "…", "month": "…", "day": "…"}` (month and day optional).
-Also: `petscan` (a saved query's PSID: pages of the same wiki, or Wikidata items), `sparql` (a query selecting `?item`), `instance_of` (Q-ids; subclasses count), `archive_urls` (`original`, `skip`, `keep`), `value_pattern` (`"{1}-{2}"`), `unwrap_templates`, `lead_only` (booleans),
+Also: `skip_removed` (default `true`), `petscan` (a saved query's PSID: pages of the same wiki, or Wikidata items), `sparql` (a query selecting `?item`), `instance_of` (Q-ids; subclasses count), `archive_urls` (`original`, `skip`, `keep`), `value_pattern` (`"{1}-{2}"`), `unwrap_templates`, `lead_only` (booleans),
 and `transform.case` (`unchanged`, `lower`, `upper`).
 `coordinate_parameters` is `{"latitude": "…", "longitude": "…"}` (permalink: `latparam`, `lonparam`).
 Fixed qualifier values are written as on Wikidata: `Q1860`, `2024-05-01`, `42`,
