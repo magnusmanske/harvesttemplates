@@ -25,6 +25,10 @@ the long-standing problems:
 
 ## Documentation
 
+For users: [Help](docs/HELP.md) and [Examples](docs/EXAMPLES.md).
+
+For developers:
+
 - [Architecture](docs/ARCHITECTURE.md): modules, the life of a run, design decisions
 - [Harvest pipeline](docs/HARVEST_PIPELINE.md): what happens to each page, value parsing, every message
 - [Constraint checks](docs/CONSTRAINTS.md)

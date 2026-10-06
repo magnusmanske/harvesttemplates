@@ -31,6 +31,36 @@ body {
   opacity: 0.8;
 }
 
+/* Links in a row; on small screens, a list behind the burger button. */
+.ht-menu {
+  display: flex;
+  gap: 1rem;
+}
+
+.ht-burger {
+  background: none;
+  border: 1px solid rgb(255 255 255 / 50%);
+  border-radius: 0.375rem;
+  color: #fff;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.25rem 0.6rem;
+}
+
+@media (max-width: 767.98px) {
+  .ht-menu {
+    display: none;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem 0 0.25rem;
+    width: 100%;
+  }
+
+  .ht-menu.open {
+    display: flex;
+  }
+}
+
 /* ========== Form ========== */
 .ht-form .card {
   border: 0;
