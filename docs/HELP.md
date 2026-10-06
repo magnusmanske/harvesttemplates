@@ -74,7 +74,9 @@ run, where they can be reviewed or undone. Every message is explained in
 ## Sharing
 
 **Permalink** (under the form) and **Edit as new run** (on a run) give a link
-to the same settings. **Share publicly** adds the query to the shared list,
+to the same settings. **Other wikis** (on a run) lists the template on other
+language versions, each linking to the same settings there; check the parameter
+names, as they often differ by language. **Share publicly** adds the query to the shared list,
 with optional tags; `#/shares/TAG` lists one tag.
 
 ## Good to know

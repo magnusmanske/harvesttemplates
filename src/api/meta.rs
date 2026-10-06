@@ -5,12 +5,13 @@ use crate::constraints;
 use crate::harvest::JobSpec;
 use crate::ids::{ItemId, PropertyId};
 use crate::wiki::Site;
+use crate::wiki::content::{self, LinkTarget};
 use crate::wiki::site::{NS_TEMPLATE, host_for};
-use crate::wikidata::{ConstraintDef, ConstraintStatus};
+use crate::wikidata::{ConstraintDef, ConstraintStatus, Sitelink};
 use axum::extract::{Path, Query, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 pub fn routes() -> Router<SharedState> {
@@ -19,6 +20,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/spec/to-query", post(spec_to_query))
         .route("/site", get(site))
         .route("/template", get(template))
+        .route("/template/other-wikis", get(other_wikis))
         .route("/property/{id}", get(property))
 }
 
@@ -60,6 +62,41 @@ async fn template(State(app): State<SharedState>, Query(q): Query<WikiQuery>) ->
     Ok(Json(
         json!({ "exists": redirects.is_some(), "name": key.replace('_', " "), "redirects": redirects, "url": url }),
     ))
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+struct OtherWiki {
+    siteid: String,
+    project: String,
+    /// The template's name there, without namespace.
+    template: String,
+    url: String,
+}
+
+/// The same template on other wikis of the same project, via its Wikidata item (#206).
+async fn other_wikis(State(app): State<SharedState>, Query(q): Query<WikiQuery>) -> ApiResult<Vec<OtherWiki>> {
+    let site = load_site(&app, &q).await?;
+    let key = site.db_key(NS_TEMPLATE, q.template.as_deref().unwrap_or_default());
+    let title = site.full_title(NS_TEMPLATE, &key);
+    let LinkTarget::Item(item) = content::link_target(&app.clients.mw, &site, &title).await? else {
+        return Ok(Json(vec![]));
+    };
+    let links = app.clients.wikidata.sitelinks(item).await?;
+    let mut wikis: Vec<OtherWiki> =
+        links.into_iter().filter(|l| l.dbname != site.dbname).filter_map(|l| other_wiki(l, &q.project)).collect();
+    wikis.sort_by(|a, b| a.siteid.cmp(&b.siteid));
+    Ok(Json(wikis))
+}
+
+/// Only wikis of `project`, and only hosts we would build ourselves.
+fn other_wiki(link: Sitelink, project: &str) -> Option<OtherWiki> {
+    let host = link.url.split("://").nth(1)?.split('/').next()?;
+    let siteid = host.split('.').next()?;
+    if host_for(siteid, project).ok()? != host {
+        return None;
+    }
+    let template = link.title.split_once(':').map_or(link.title.as_str(), |(_, name)| name).to_string();
+    Some(OtherWiki { siteid: siteid.to_string(), project: project.to_string(), template, url: link.url })
 }
 
 /// One entry per constraint type (the form selects by type), with its strictest status.
@@ -105,4 +142,23 @@ async fn property(State(app): State<SharedState>, Path(id): Path<String>) -> Api
         "constraints": constraints,
         "units": units,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn link(dbname: &str, title: &str, url: &str) -> Sitelink {
+        Sitelink { dbname: dbname.into(), title: title.into(), url: url.into() }
+    }
+
+    #[test]
+    fn other_wikis_of_the_same_project() {
+        let de = other_wiki(link("dewiki", "Vorlage:IMDb", "https://de.wikipedia.org/wiki/Vorlage:IMDb"), "wikipedia");
+        assert_eq!(de.unwrap().template, "IMDb");
+        let other_project = link("dewikiquote", "Vorlage:IMDb", "https://de.wikiquote.org/wiki/Vorlage:IMDb");
+        assert_eq!(other_wiki(other_project, "wikipedia"), None);
+        let odd_host = link("xwiki", "Template:X", "https://evil.example/wiki/Template:X");
+        assert_eq!(other_wiki(odd_host, "wikipedia"), None);
+    }
 }

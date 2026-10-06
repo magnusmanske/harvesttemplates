@@ -298,7 +298,8 @@ Every open issue mapped to a phase. "Design" = solved by the architecture.
 | 56 | `wbparsevalue` | 2 ✓ | Fallback for dates (quantities: Wikibase's parser does not read units, so no gain) |
 | 118 | testwikis | 3 | Repo from `meta=wikibase`; parametrise Wikidata URLs |
 | 111 | Multi‑property | 3 ✓ | Extra properties from the same template; a row per page and property |
-| 206, 108 | Multi‑wiki / multi‑template | 3 | #206: "other wikis" list from the template's sitelinks |
+| 206 | Other wikis | 3 ✓ | "Other wikis" on a run: the template's sitelinks, each opening the settings there |
+| 108 | Multi‑template | 3 | Not done |
 | 89 | History check | 3 ✓ | Last 500 summaries scanned for a removal of the same value; on by default |
 | 53 | Commons linking | 3 | Via `wikibase_item` on Commons categories / P1472 |
 | 146 | Voting on shares | 3 | Maybe; low value vs. complexity |

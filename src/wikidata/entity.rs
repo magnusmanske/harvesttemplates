@@ -110,6 +110,18 @@ impl Wikidata {
             .any(|c| c.contains("wbremoveclaims-remove") && mentions(c, &needle)))
     }
 
+    /// The pages linked to an item, on all wikis.
+    pub async fn sitelinks(&self, item: ItemId) -> Result<Vec<Sitelink>> {
+        let entities = self.entities(&[item.to_string()], "sitelinks/urls").await?;
+        let links = entities.iter().flat_map(|e| e["sitelinks"].as_object().into_iter().flat_map(Map::values));
+        Ok(links
+            .filter_map(|l| {
+                let text = |key: &str| l[key].as_str().map(str::to_string);
+                Some(Sitelink { dbname: text("site")?, title: text("title")?, url: text("url")? })
+            })
+            .collect())
+    }
+
     /// A date via Wikibase's own parser (`wbparsevalue`), which knows MediaWiki's
     /// month names in every language (#56). `None` if it cannot parse the text,
     /// or only to decade or century precision.
@@ -141,6 +153,14 @@ impl Wikidata {
 fn mentions(text: &str, needle: &str) -> bool {
     text.match_indices(needle)
         .any(|(i, _)| text[i + needle.len()..].chars().next().is_none_or(|c| matches!(c, ',' | ' ' | ';')))
+}
+
+/// A page linked to an item, e.g. `dewiki`, `Vorlage:IMDb`, `https://de.wikipedia.org/wiki/…`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Sitelink {
+    pub dbname: String,
+    pub title: String,
+    pub url: String,
 }
 
 /// An item with its statements.

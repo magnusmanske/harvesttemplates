@@ -20,6 +20,7 @@ Mutating requests from other origins are refused.
 |---|---|
 | `GET /api/site?siteid=de&project=wikipedia` | dbname, language, namespaces, template/file/category prefixes, edition item |
 | `GET /api/template?siteid=…&project=…&template=…` | `exists`, normalised `name`, `redirects`, `url` |
+| `GET /api/template/other-wikis?siteid=…&project=…&template=…` | The same template on other wikis of the project (via its Wikidata item): `siteid`, `project`, local `template` name, `url` |
 | `GET /api/property/P345` | label, datatype, `supported`, `deprecated`, `formatter_url` (P1630), `constraints` (one per type: id, label, status, supported), `units` (allowed units, `id: null` = no unit; `null` if unrestricted) |
 | `GET /api/spec/from-query?<permalink params>` | a `JobSpec` from an old-style permalink |
 | `POST /api/spec/to-query` with a `JobSpec` | `{"query": "siteid=…"}` |

@@ -1,6 +1,6 @@
 // One run: progress, actions, and the per-page results.
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { api } from './api.js';
+import { api, toQuery } from './api.js';
 import { user, login } from './session.js';
 import { pageUrl, entityUrl, editGroupUrl, formatTime, statusColor, rowStatusLabel, valueUrl } from './links.js';
 
@@ -23,6 +23,7 @@ export default {
     const info = ref(null);
     const rows = ref([]);
     const properties = ref([]); // per field: the main property, then the extras
+    const otherWikis = ref(null); // null: not loaded; then a list
     const filter = ref('');
     const offset = ref(0);
     const error = ref('');
@@ -71,6 +72,25 @@ export default {
       }
     }
 
+    async function toggleOtherWikis() {
+      if (otherWikis.value) return (otherWikis.value = null);
+      const s = run.value.spec;
+      try {
+        otherWikis.value = await api(`/template/other-wikis?${toQuery({ siteid: s.siteid, project: s.project, template: s.template })}`);
+      } catch (e) {
+        error.value = e.message;
+      }
+    }
+
+    /** This run's settings on another wiki; wiki-specific filters are dropped. */
+    function otherWikiUrl(wiki) {
+      const query = new URLSearchParams(info.value.permalink);
+      query.set('siteid', wiki.siteid);
+      query.set('template', wiki.template);
+      ['templateredirects', 'category', 'depth', 'manuallist', 'petscan'].forEach((key) => query.delete(key));
+      return `/?${query}`;
+    }
+
     async function share() {
       const title = prompt('Title for the shared query, e.g. "IMDb IDs from enwiki films"');
       if (!title) return;
@@ -91,7 +111,7 @@ export default {
 
     return {
       info, run, counts, total, rows, filter, offset, error, busy, isOwner, canWork, progress, excluded, FILTERS, PAGE_SIZE,
-      refresh, share, login, pageUrl, entityUrl, editGroupUrl, formatTime, statusColor, rowStatusLabel, properties, valueUrl,
+      refresh, share, login, otherWikis, toggleOtherWikis, otherWikiUrl, pageUrl, entityUrl, editGroupUrl, formatTime, statusColor, rowStatusLabel, properties, valueUrl,
       preview: () => act('preview'),
       start: () => act('start', `Add up to ${(counts.value.pending + counts.value.ready).toLocaleString()} statements to Wikidata as ${user.value}?`),
       stop: () => act('stop'),
@@ -134,6 +154,19 @@ export default {
     <a class="btn btn-outline-secondary" :href="'/?' + info.permalink">Edit as new run</a>
     <button class="btn btn-outline-secondary" @click="share">Share publicly</button>
     <a v-if="counts.done" class="btn btn-outline-secondary" :href="editGroupUrl(run.editgroup)" target="_blank" rel="noopener">Edit group</a>
+    <button class="btn btn-outline-secondary" :class="{ active: otherWikis }" @click="toggleOtherWikis">Other wikis</button>
+  </div>
+  <div v-if="otherWikis" class="card card-body mb-3">
+    <p v-if="!otherWikis.length" class="mb-0 text-muted">The template is not linked to other wikis on Wikidata.</p>
+    <template v-else>
+      <p class="small mb-2">
+        The template on {{ otherWikis.length }} other wikis. Each link opens this run's settings there, without
+        category and page filters; check the parameter names, they often differ by language.
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        <a v-for="w in otherWikis" :href="otherWikiUrl(w)" target="_blank" rel="noopener" class="btn btn-sm btn-light" :title="w.template">{{ w.siteid }}</a>
+      </div>
+    </template>
   </div>
 
   <ul class="nav nav-tabs">
