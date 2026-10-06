@@ -5,6 +5,8 @@ Add an entry under *Unreleased* with every change.
 
 ## Unreleased
 
+## 0.3.0 – 2026-10-06
+
 ### Added
 - The old tool's 621 shared queries are imported with their ids, so
   `index.html?htid=…` links work again and load like they used to.
