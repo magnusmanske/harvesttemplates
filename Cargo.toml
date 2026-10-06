@@ -5,6 +5,7 @@ edition = "2024"
 license = "MIT"
 description = "Harvest template parameters from Wikimedia projects into Wikidata"
 repository = "https://github.com/magnusmanske/harvesttemplates"
+authors = ["Magnus Manske <magnusmanske@proton.me>"]
 
 [dependencies]
 anyhow = "1"
