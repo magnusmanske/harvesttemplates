@@ -283,11 +283,11 @@ async fn date(job: &Job, clients: &Clients, text: &str) -> Result<Date, Rejectio
     let says_more_than_a_year = !text.trim().chars().all(|c| c.is_ascii_digit());
     match ours {
         Err(ValueError::NoDate) => {
-            let parsed = clients.wikidata.parse_time(text, &job.site.lang).await.map_err(failed)?;
+            let parsed = clients.wikidata.parse_time(text, &job.site.lang).await;
             parsed.ok_or_else(|| bad_value(ValueError::NoDate))
         }
         Ok(year) if year.precision() == 9 && says_more_than_a_year => {
-            let parsed = clients.wikidata.parse_time(text, &job.site.lang).await.map_err(failed)?;
+            let parsed = clients.wikidata.parse_time(text, &job.site.lang).await;
             Ok(parsed.filter(|p| p.year == year.year && p.precision() > 9).unwrap_or(year))
         }
         result => result.map_err(bad_value),

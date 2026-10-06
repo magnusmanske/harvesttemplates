@@ -321,6 +321,8 @@ async fn dates_fall_back_to_wikibase_parser() {
     };
     assert_eq!(eval("{{X|born=12 Bealtaine 1950}}").await, Ok("1950-05-12".into()));
     assert_eq!(eval("{{X|born=unknown}}").await, Err(error("could not find a date")));
+    mock(&server, "values=1953+%28first%29", serde_json::json!({"error": {"code": "wikibase-parse-error-time"}})).await;
+    assert_eq!(eval("{{X|born=1953 (first)}}").await, Ok("1953".into()), "an API error keeps our year");
     assert_eq!(eval("{{X|born=c. 1950}}").await, Err(error("imprecise date")), "our rejections are final");
 }
 

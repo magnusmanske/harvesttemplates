@@ -113,13 +113,14 @@ impl Wikidata {
     /// A date via Wikibase's own parser (`wbparsevalue`), which knows MediaWiki's
     /// month names in every language (#56). `None` if it cannot parse the text,
     /// or only to decade or century precision.
-    pub async fn parse_time(&self, text: &str, lang: &str) -> Result<Option<Date>> {
+    /// Best effort: an API error (Wikibase reports some unparsable text that way) is also `None`.
+    pub async fn parse_time(&self, text: &str, lang: &str) -> Option<Date> {
         let options = serde_json::json!({ "lang": lang }).to_string();
         let p = params(&[("action", "wbparsevalue"), ("datatype", "time"), ("values", text), ("options", &options)]);
-        let json = self.api.get(HOST, &p).await?;
+        let json = self.api.get(HOST, &p).await.inspect_err(|e| tracing::debug!("wbparsevalue: {e:#}")).ok()?;
         let value = &json["results"][0]["value"];
         let precise_enough = value["precision"].as_u64().is_some_and(|p| p >= 9);
-        Ok(existing_date(value).filter(|d| precise_enough && d.year > 0))
+        existing_date(value).filter(|d| precise_enough && d.year > 0)
     }
 
     /// English labels, falling back to the id.
