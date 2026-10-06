@@ -76,9 +76,9 @@ npm install --no-save @vue/compiler-dom@3.5.43 && node scripts/check-templates.m
 
 ## Deployment (Toolforge)
 
-Not deployed yet; this is the intended setup. The tool is built with the
-Toolforge build service; `Procfile` starts the web server with
-`$TOOL_DATA_DIR/config.json`.
+Live at <https://harvesttemplates.toolforge.org/>, built with the Toolforge
+build service from GitHub; `Procfile` starts the web server with
+`$TOOL_DATA_DIR/config.json`, and `build.sh` rebuilds and restarts it.
 
 In the tool's home (`/data/project/harvesttemplates`):
 
@@ -95,3 +95,14 @@ toolforge webservice buildservice start --mount=all
 
 `--mount=all` gives the container the tool's home, where the config,
 credentials and sessions live.
+
+**Shared queries of the old tool** (`?htid=` links) are imported once, keeping
+their ids; repeating it only adds new ones. It takes a few minutes:
+
+```sh
+toolforge jobs run import-shares --wait --mount=all \
+  --image tool-harvesttemplates/tool-harvesttemplates:latest \
+  --command "target/release/harvesttemplates --config /data/project/harvesttemplates/config.json import-legacy-shares"
+```
+
+Add `--dry-run` to the command to only check them.

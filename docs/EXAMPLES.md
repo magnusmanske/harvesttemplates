@@ -48,6 +48,7 @@ with the pattern `{1}-{2}`.
 Permalinks of the old tool work here too: replace
 `https://pltools.toolforge.org/harvesttemplates/` with
 `https://harvesttemplates.toolforge.org/`. Links ending in `&run=` start loading
-as soon as you are logged in; they never start editing on their own.
+as soon as you are logged in; they never start editing on their own. Old
+shared queries (`index.html?htid=…`) are available under their old ids.
 
 More ready-made queries: [Shared queries](https://harvesttemplates.toolforge.org/#/shares).

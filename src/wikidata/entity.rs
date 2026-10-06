@@ -342,7 +342,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database / external services — run with cargo test -- --ignored"]
     async fn live_removal_is_found() {
-        let http = crate::app_state::http_client("HarvestTemplates tests (https://harvesttemplates.toolforge.org)").unwrap();
+        let http =
+            crate::app_state::http_client("HarvestTemplates tests (https://harvesttemplates.toolforge.org)").unwrap();
         let wikidata = Wikidata { api: MwApi::new(http) };
         let isni = |s: &str| Value::String(s.to_string());
         assert!(wikidata.was_removed(ItemId(5_716_580), PropertyId(213), &isni("0000000116716546")).await.unwrap());

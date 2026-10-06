@@ -88,6 +88,25 @@ pub struct ShareRecord {
     pub last_done: Option<u64>,
     pub last_errors: Option<u64>,
     pub tags: Vec<String>,
+    /// Its `htid` in the old tool, if imported from there.
+    pub legacy_id: Option<u64>,
+}
+
+impl ShareRecord {
+    /// Shares imported from the old tool only know their creator's name.
+    pub fn is_owned_by(&self, user_id: u64, user_name: &str) -> bool {
+        self.user_id == user_id || (self.user_id == 0 && self.user_name == user_name)
+    }
+}
+
+/// A shared query from the old tool, to import.
+#[derive(Debug, Clone)]
+pub struct LegacyShare {
+    pub legacy_id: u64,
+    pub user_name: String,
+    pub title: String,
+    pub spec: JobSpec,
+    pub last_completed: Option<i64>,
 }
 
 #[derive(Clone)]
@@ -301,12 +320,34 @@ impl Store {
     }
 
     pub async fn share(&self, id: u64) -> Result<Option<ShareRecord>> {
+        self.share_where("id", id).await
+    }
+
+    /// A share imported from the old tool, by its old `htid`.
+    pub async fn share_by_legacy_id(&self, legacy_id: u64) -> Result<Option<ShareRecord>> {
+        self.share_where("legacy_id", legacy_id).await
+    }
+
+    /// `column` is one of our fixed column names, never user input.
+    async fn share_where(&self, column: &str, value: u64) -> Result<Option<ShareRecord>> {
         let mut conn = self.conn().await?;
-        let row: Option<Row> =
-            conn.exec_first(format!("SELECT {SHARE_COLUMNS} FROM share WHERE id = ?"), (id,)).await?;
-        let Some(mut share) = row.map(share_from_row).transpose()? else { return Ok(None) };
-        share.tags = conn.exec("SELECT tag FROM share_tag WHERE share_id = ? ORDER BY tag", (id,)).await?;
+        let sql = format!("SELECT {SHARE_COLUMNS} FROM share WHERE {column} = ?");
+        let Some(mut share) = conn.exec_first(sql, (value,)).await?.map(share_from_row).transpose()? else {
+            return Ok(None);
+        };
+        share.tags = conn.exec("SELECT tag FROM share_tag WHERE share_id = ? ORDER BY tag", (share.id,)).await?;
         Ok(Some(share))
+    }
+
+    /// Returns `false` if this old share was imported already.
+    pub async fn import_legacy_share(&self, share: &LegacyShare) -> Result<bool> {
+        let sql = "INSERT IGNORE INTO share (user_id, user_name, title, spec, created, last_completed, legacy_id)
+                   VALUES (0, ?, ?, ?, ?, ?, ?)";
+        let mut conn = self.conn().await?;
+        let spec = serde_json::to_string(&share.spec)?;
+        let params = (&share.user_name, &share.title, spec, now(), share.last_completed, share.legacy_id);
+        conn.exec_drop(sql, params).await?;
+        Ok(conn.affected_rows() > 0)
     }
 
     /// Replace a share's tags (#174). Ownership is the caller's to check.
@@ -318,10 +359,10 @@ impl Store {
         Ok(())
     }
 
-    /// Only the owner can delete. Returns whether a share was deleted.
-    pub async fn delete_share(&self, id: u64, user_id: u64) -> Result<bool> {
+    /// Ownership is the caller's to check. Returns whether a share was deleted.
+    pub async fn delete_share(&self, id: u64) -> Result<bool> {
         let mut conn = self.conn().await?;
-        conn.exec_drop("DELETE FROM share WHERE id = ? AND user_id = ?", (id, user_id)).await?;
+        conn.exec_drop("DELETE FROM share WHERE id = ?", (id,)).await?;
         let deleted = conn.affected_rows() > 0;
         if deleted {
             conn.exec_drop("DELETE FROM share_tag WHERE share_id = ?", (id,)).await?;
@@ -342,7 +383,7 @@ const RUN_COLUMNS: &str =
     "id, user_id, user_name, share_id, spec, status, editgroup, excluded, message, created, started, finished";
 const ROW_COLUMNS: &str = "seq, page_id, title, item, status, raw_value, value, message";
 const SHARE_COLUMNS: &str =
-    "id, user_id, user_name, title, spec, created, last_run_id, last_completed, last_done, last_errors";
+    "id, user_id, user_name, title, spec, created, last_run_id, last_completed, last_done, last_errors, legacy_id";
 
 /// Statements of an SQL script, without `--` comment lines.
 fn sql_statements(script: &str) -> Vec<String> {
@@ -404,6 +445,7 @@ fn share_from_row(mut row: Row) -> Result<ShareRecord> {
         last_done: take(&mut row, "last_done")?,
         last_errors: take(&mut row, "last_errors")?,
         tags: vec![],
+        legacy_id: take(&mut row, "legacy_id")?,
     })
 }
 

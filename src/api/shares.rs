@@ -21,6 +21,7 @@ pub fn routes() -> Router<SharedState> {
         .route("/", get(list).post(create))
         .route("/{id}", get(show).delete(delete))
         .route("/{id}/tags", put(set_tags))
+        .route("/legacy/{htid}", get(show_legacy))
 }
 
 async fn list(State(app): State<SharedState>) -> ApiResult<Vec<ShareRecord>> {
@@ -29,6 +30,11 @@ async fn list(State(app): State<SharedState>) -> ApiResult<Vec<ShareRecord>> {
 
 async fn show(State(app): State<SharedState>, Path(id): Path<u64>) -> ApiResult<ShareRecord> {
     Ok(Json(app.store.share(id).await?.ok_or(ApiError::NotFound)?))
+}
+
+/// A share imported from the old tool, by its `htid`.
+async fn show_legacy(State(app): State<SharedState>, Path(htid): Path<u64>) -> ApiResult<ShareRecord> {
+    Ok(Json(app.store.share_by_legacy_id(htid).await?.ok_or(ApiError::NotFound)?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,7 +73,7 @@ async fn set_tags(
 ) -> ApiResult<Vec<String>> {
     let user = require_user(&session).await?;
     let share = app.store.share(id).await?.ok_or(ApiError::NotFound)?;
-    if share.user_id != user.id {
+    if !share.is_owned_by(user.id, &user.name) {
         return Err(ApiError::Forbidden("only the creator can change the tags".into()));
     }
     let tags = normalize_tags(&body.tags)?;
@@ -78,7 +84,7 @@ async fn set_tags(
 async fn delete(State(app): State<SharedState>, session: Session, Path(id): Path<u64>) -> Result<StatusCode, ApiError> {
     let user = require_user(&session).await?;
     let share = app.store.share(id).await?.ok_or(ApiError::NotFound)?;
-    if share.user_id != user.id || !app.store.delete_share(id, user.id).await? {
+    if !share.is_owned_by(user.id, &user.name) || !app.store.delete_share(id).await? {
         return Err(ApiError::Forbidden("only the creator can delete a shared query".into()));
     }
     Ok(StatusCode::NO_CONTENT)

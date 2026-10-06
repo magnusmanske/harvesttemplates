@@ -105,18 +105,23 @@ export default {
     async function initialise() {
       const params = new URLSearchParams(location.search);
       Object.assign(spec, await api(`/spec/from-query?${params}`));
-      if (params.has('share')) {
-        const share = await api(`/shares/${params.get('share')}`);
-        Object.assign(spec, share.spec);
-        shareId.value = share.id;
-        notice.value = `Loaded the shared query "${share.title}" by ${share.user_name}.`;
+      // ?share=ID, or ?htid=ID for queries shared in the old tool (which loaded them right away).
+      const shareUrl = params.has('share') ? `/shares/${params.get('share')}` : params.has('htid') ? `/shares/legacy/${params.get('htid')}` : null;
+      if (shareUrl) {
+        try {
+          const share = await api(shareUrl);
+          Object.assign(spec, share.spec);
+          shareId.value = share.id;
+          notice.value = `Loaded the shared query "${share.title}" by ${share.user_name}.`;
+        } catch {
+          notice.value = 'This shared query does not exist (any more).';
+        }
       }
-      if (params.has('htid')) notice.value = 'Shared queries from the old tool are not available here yet; please recreate it below.';
       if (!spec.parameters.length) spec.parameters.push('');
       propertyText.value = spec.property ?? '';
       limitText.value = dateText(spec.date_limit?.date);
       ready.value = true;
-      if (params.has('run') && user.value) await submit();
+      if ((params.has('run') || (params.has('htid') && shareId.value)) && user.value) await submit();
     }
 
     async function submit() {

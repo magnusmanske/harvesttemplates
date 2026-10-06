@@ -46,6 +46,7 @@ Row status: `pending`, `ready` (previewed, would be added), `done`, `skipped`, `
 |---|---|
 | `GET /api/shares` | All shared queries with their tags and the outcome of their last complete run. The page `#/shares/TAG` lists one tag. |
 | `GET /api/shares/{id}` | One share, including its spec. |
+| `GET /api/shares/legacy/{htid}` | A share imported from the old tool, by its old id. |
 | `POST /api/shares` `{"title": "…", "spec": JobSpec, "tags": ["…"]}` | Login required; the spec must validate. Tags are normalised (`Czech Wikipedia` → `czech-wikipedia`), at most 10. |
 | `PUT /api/shares/{id}/tags` `{"tags": ["…"]}` | Creator only. Returns the normalised tags. |
 | `DELETE /api/shares/{id}` | Creator only. |

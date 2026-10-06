@@ -65,8 +65,23 @@ async fn runs_rows_and_shares() {
     assert_eq!(store.shares().await.unwrap()[0].tags, ["enwiki", "imdb"]);
     store.record_share_run(share, id, &counts).await.unwrap();
     let s = store.share(share).await.unwrap().unwrap();
-    assert_eq!((s.title.as_str(), s.last_done, s.spec), ("IMDb from enwiki", Some(1), spec));
-    assert!(!store.delete_share(share, 8).await.unwrap(), "only the owner may delete");
-    assert!(store.delete_share(share, 7).await.unwrap());
+    assert_eq!((s.title.as_str(), s.last_done, &s.spec), ("IMDb from enwiki", Some(1), &spec));
+    assert!(s.is_owned_by(7, "Someone else") && !s.is_owned_by(8, "Example User"));
+    assert!(store.delete_share(share).await.unwrap());
+
+    let legacy = LegacyShare {
+        legacy_id: 922,
+        user_name: "Old Timer".into(),
+        title: "Spoken Wikipedia".into(),
+        spec: spec.clone(),
+        last_completed: Some(1_700_000_000),
+    };
+    assert!(store.import_legacy_share(&legacy).await.unwrap());
+    assert!(!store.import_legacy_share(&legacy).await.unwrap(), "importing twice does nothing");
+    let imported = store.share_by_legacy_id(922).await.unwrap().unwrap();
+    assert_eq!((imported.legacy_id, imported.last_completed, imported.user_id), (Some(922), Some(1_700_000_000), 0));
+    assert!(imported.is_owned_by(99, "Old Timer"), "matched by name");
+    assert!(!imported.is_owned_by(99, "Someone else"));
+    assert!(store.delete_share(imported.id).await.unwrap());
     assert!(store.shares().await.unwrap().is_empty());
 }

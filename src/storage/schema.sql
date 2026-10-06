@@ -50,3 +50,7 @@ CREATE TABLE IF NOT EXISTS share_tag (
     PRIMARY KEY (share_id, tag),
     KEY tag (tag)
 ) DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_bin;
+
+-- Shared queries imported from the old tool keep their id, for ?htid= links.
+ALTER TABLE share ADD COLUMN IF NOT EXISTS legacy_id BIGINT UNSIGNED NULL;
+ALTER TABLE share ADD UNIQUE INDEX IF NOT EXISTS legacy_id (legacy_id);
