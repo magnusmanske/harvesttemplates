@@ -40,8 +40,6 @@ cargo run -- --config config.json     # http://localhost:8000
 cargo test                            # DB tests need Docker
 ```
 
-Code style and project rules are in [CLAUDE.md](CLAUDE.md).
-
 ## License
 
 [MIT](LICENSE). The original tool by Pasleim (and PLnode, whose month-name data is reused here) is CC0.
