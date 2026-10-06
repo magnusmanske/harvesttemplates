@@ -218,7 +218,7 @@ impl JobSpec {
                 "calendar" if v == Calendar::Julian.item().to_string() => {
                     spec.calendar = Calendar::Julian;
                 }
-                "limityear" => legacy_limit.0 = v.parse().ok(),
+                "limityear" => legacy_limit.0 = Some(limit_date(v)),
                 "rel" => {
                     legacy_limit.1 = Some(if v == "l" { Relation::Before } else { Relation::AtLeast });
                 }
@@ -239,9 +239,9 @@ impl JobSpec {
                 _ => {}
             }
         }
-        if let (Some(year), relation) = legacy_limit {
-            let date = Date { year, month: 0, day: 0 };
-            spec.date_limit = Some(DateLimit { relation: relation.unwrap_or(Relation::AtLeast), date });
+        if let (Some(date), relation) = legacy_limit {
+            let relation = relation.unwrap_or(Relation::AtLeast);
+            spec.date_limit = date.map(|date| DateLimit { relation, date });
         }
         spec.parameters.retain(|p| !p.trim().is_empty());
         spec
@@ -326,9 +326,13 @@ impl JobSpec {
         if self.calendar == Calendar::Julian {
             q.push(("calendar", Calendar::Julian.item().to_string()));
         }
-        if let Some(limit) = self.date_limit.filter(|l| *l != DEFAULT_LIMIT) {
-            q.push(("limityear", limit.date.year.to_string()));
-            q.push(("rel", if limit.relation == Relation::Before { "l" } else { "geq" }.into()));
+        match self.date_limit {
+            None => q.push(("limityear", "none".into())),
+            Some(limit) if limit != DEFAULT_LIMIT => {
+                q.push(("limityear", limit.date.to_string()));
+                q.push(("rel", if limit.relation == Relation::Before { "l" } else { "geq" }.into()));
+            }
+            Some(_) => {}
         }
         q.extend(self.unit.map(|u| ("unit", u.to_string())));
         if self.decimal_mark == DecimalMark::Comma {
@@ -349,6 +353,17 @@ fn date_parameters(spec: &mut JobSpec) -> &mut DateParameters {
 
 fn split_pipes(s: &str) -> Vec<String> {
     s.split('|').map(str::trim).filter(|p| !p.is_empty()).map(String::from).collect()
+}
+
+/// `1926`, `1582-10-15`, or `none` for no limit. Anything unreadable keeps the default.
+fn limit_date(text: &str) -> Option<Date> {
+    if text == "none" {
+        return None;
+    }
+    let mut parts = text.split('-');
+    let Some(year) = parts.next().and_then(|y| y.parse().ok()) else { return Some(DEFAULT_LIMIT.date) };
+    let mut next = || parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+    Some(Date { year, month: next(), day: next() })
 }
 
 fn coordinate_parameters(spec: &mut JobSpec) -> &mut CoordinateParameters {
@@ -447,6 +462,27 @@ mod tests {
             .map(|(k, v)| (k.to_string(), urlencoding::decode(v).unwrap().into_owned()))
             .collect();
         assert_eq!(JobSpec::from_legacy_query(&pairs), spec);
+    }
+
+    #[test]
+    fn date_limits_round_trip() {
+        let limit = |date| Some(DateLimit { relation: Relation::Before, date });
+        for date_limit in [
+            None,
+            Some(DEFAULT_LIMIT),
+            limit(Date { year: 1582, month: 10, day: 15 }),
+            limit(Date { year: 1700, month: 0, day: 0 }),
+        ] {
+            let spec = JobSpec { date_limit, ..Default::default() };
+            let pairs: Vec<(String, String)> = spec
+                .to_legacy_query()
+                .split('&')
+                .filter_map(|kv| kv.split_once('='))
+                .map(|(k, v)| (k.to_string(), urlencoding::decode(v).unwrap().into_owned()))
+                .collect();
+            assert_eq!(JobSpec::from_legacy_query(&pairs).date_limit, date_limit);
+        }
+        assert_eq!(parse("limityear=1926").date_limit, Some(DEFAULT_LIMIT), "old links");
     }
 
     #[test]
