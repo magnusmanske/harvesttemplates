@@ -25,7 +25,8 @@ the long-standing problems:
 
 ## Documentation
 
-For users: [Help](docs/HELP.md) and [Examples](docs/EXAMPLES.md).
+For users: [Help](docs/HELP.md), [Examples](docs/EXAMPLES.md), and what changed
+compared to the original tool: [Changelog](CHANGELOG.md).
 
 For developers:
 

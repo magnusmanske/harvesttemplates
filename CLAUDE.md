@@ -15,6 +15,7 @@
 - Fix clippy warnings, even pre-existing ones.
 - Surgical Edits: "Prefer editing existing lines over rewriting entire blocks. Avoid adding middleware, frameworks, or abstract classes for simple feature requests".
 - Complexity Ceiling: "Keep cyclomatic complexity low. If a function exceeds 10-15 lines, evaluate if it can be simplified before splitting it into smaller, potentially more fragmented functions".
+- Log every user-visible change in `CHANGELOG.md`, under *Unreleased*.
 - Discovery First: "Before creating a new utility or helper function, search the codebase to see if a canonical implementation already exists and reuse it".
 
 ## What this is
