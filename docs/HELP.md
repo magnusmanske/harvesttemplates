@@ -41,6 +41,9 @@ template are listed; untick the ones that mean something else.
 - Links to archived copies of web pages: use the original URL, skip, or keep.
 - *Qualifiers*: added to every statement. Either a fixed value (`Q1860`,
   `2024-05-01`, `text@en`) or another parameter of the same template.
+- *Also harvest*: more properties from the same template in the same run, e.g.
+  date of death next to date of birth. They share the value options; the
+  results have a row per page and property.
 
 **Modify values**: add/remove a prefix or suffix, a regex search and replace
 (`$1` for groups), lower or upper case.

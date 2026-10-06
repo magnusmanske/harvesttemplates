@@ -54,3 +54,6 @@ CREATE TABLE IF NOT EXISTS share_tag (
 -- Shared queries imported from the old tool keep their id, for ?htid= links.
 ALTER TABLE share ADD COLUMN IF NOT EXISTS legacy_id BIGINT UNSIGNED NULL;
 ALTER TABLE share ADD UNIQUE INDEX IF NOT EXISTS legacy_id (legacy_id);
+
+-- Runs with several properties (#111) have one row per page and property.
+ALTER TABLE run_row ADD COLUMN IF NOT EXISTS field TINYINT UNSIGNED NOT NULL DEFAULT 0;

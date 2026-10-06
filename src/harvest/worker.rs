@@ -30,7 +30,7 @@ pub async fn load(app: Arc<AppState>, run_id: u64, job: Job, claim: Claim) {
 
 async fn load_rows(app: &AppState, run_id: u64, job: &Job) -> Result<()> {
     let (pages, excluded) = candidates(job, &app.clients, app.pages.as_ref(), app.limits()).await?;
-    app.store.add_rows(run_id, &pages).await?;
+    app.store.add_rows(run_id, &pages, job.field_count()).await?;
     app.store.set_excluded(run_id, &serde_json::to_value(excluded)?).await
 }
 
@@ -129,7 +129,8 @@ impl Worker {
                 return Ok(Flow::Continue);
             };
             after = Some(last.seq);
-            let ids: Vec<u64> = rows.iter().map(|r| r.page_id).collect();
+            let mut ids: Vec<u64> = rows.iter().map(|r| r.page_id).collect();
+            ids.dedup(); // a page's rows (one per property) are consecutive
             let revisions = content::revisions(&self.app.clients.mw, &self.job.site, &ids).await?;
             for row in &rows {
                 if self.claim.stop_requested() {
@@ -146,16 +147,17 @@ impl Worker {
     async fn row(&mut self, row: &RowRecord, revision: Option<&Revision>) -> Result<Flow> {
         let item = row.item.as_deref().and_then(|q| q.parse().ok());
         let page = Page { id: row.page_id, title: row.title.clone(), item, latest_revision: 0 };
-        let outcome = match revision {
-            Some(revision) => evaluate(&self.job, &self.app.clients, &page, revision).await,
-            None => {
-                Outcome { raw: None, value: None, result: Err(Rejection::Error("the page no longer exists".into())) }
-            }
+        let failed = |m: &str| Outcome { raw: None, value: None, result: Err(Rejection::Error(m.into())) };
+        let job = self.job.field(row.field);
+        let outcome = match (job, revision) {
+            (Some(job), Some(revision)) => evaluate(job, &self.app.clients, &page, revision).await,
+            (None, _) => failed("unknown property of the run"),
+            (_, None) => failed("the page no longer exists"),
         };
         let (status, message, item) = match &outcome.result {
             Err(Rejection::Skip(m)) => (RowStatus::Skipped, Some(m.clone()), None),
             Err(Rejection::Error(m)) => (RowStatus::Error, Some(m.clone()), None),
-            Ok(edit) => match self.save(edit).await? {
+            Ok(edit) => match self.save(edit, row.field).await? {
                 Saved::Ok(status) => (status, None, Some(edit.item.to_string())),
                 Saved::Rejected(m) => (RowStatus::Error, Some(m), Some(edit.item.to_string())),
                 Saved::Stopped => return Ok(Flow::Stop),
@@ -172,11 +174,12 @@ impl Worker {
         Ok(Flow::Continue)
     }
 
-    async fn save(&mut self, edit: &PlannedEdit) -> Result<Saved> {
+    async fn save(&mut self, edit: &PlannedEdit, field: u8) -> Result<Saved> {
         let Mode::Edit(editor) = &mut self.mode else {
             return Ok(Saved::Ok(RowStatus::Ready));
         };
-        let summary = summary(&self.job, &edit.value, &self.run.editgroup);
+        let job = self.job.field(field).unwrap_or(&self.job);
+        let summary = summary(job, &edit.value, &self.run.editgroup);
         let interval = Duration::from_millis(self.app.config.harvest.edit_interval_ms);
         loop {
             match editor.add_statements(edit.item, std::slice::from_ref(&edit.statement), &summary).await {

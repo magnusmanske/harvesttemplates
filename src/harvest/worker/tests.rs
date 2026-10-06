@@ -111,3 +111,41 @@ async fn load_preview_and_edit() {
     let summary = urlencoding::decode(&edits[0].replace('+', " ")).unwrap().into_owned();
     assert!(summary.contains(&format!("editgroups/b/harvesttemplates/{}", run.editgroup)), "{summary}");
 }
+
+#[tokio::test]
+async fn two_properties_from_one_template() {
+    use crate::harvest::spec::ExtraProperty;
+    let (server, _) = world().await;
+    mock(
+        &server,
+        "generator=transcludedin",
+        json!({"query": {"pages": [
+            {"pageid": 1, "ns": 0, "title": "Shawshank", "lastrevid": 10, "pageprops": {"wikibase_item": "Q1"}}
+        ]}}),
+    )
+    .await;
+    mock(&server, "prop=revisions&rvprop=ids", json!({"query": {"pages": [
+        {"pageid": 1, "revisions": [{"revid": 11, "slots": {"main": {"content": "{{IMDb title|0111161|place=[[Paris]]}}"}}}]}
+    ]}}))
+    .await;
+    let (_db, store) = test_store().await;
+    let sessions = tempfile::tempdir().unwrap();
+    let app = test_app(store, &server.uri(), sessions.path());
+    let spec = JobSpec {
+        extra_properties: vec![ExtraProperty { property: PropertyId(19), parameters: vec!["place".into()] }],
+        ..spec()
+    };
+    let owner = Owner { id: OWNER, name: "Tester".into() };
+    let run_id = app.store.create_run(&owner, &spec, None).await.unwrap();
+    let job = Job::prepare(&app.clients, spec.clone()).await.unwrap();
+    assert_eq!(job.field_count(), 2);
+    load(app.clone(), run_id, job, app.runs.claim(run_id, OWNER, 2).unwrap()).await;
+    let run = app.store.run(run_id).await.unwrap().unwrap();
+    assert_eq!(run.excluded.as_ref().unwrap()["already_set"], 0, "no pre-filter with several properties");
+    let claim = app.runs.claim(run_id, OWNER, 2).unwrap();
+    Worker::new(app.clone(), run, Job::prepare(&app.clients, spec).await.unwrap(), Mode::Preview, claim).run().await;
+    let rows = app.store.rows(run_id, None, 0, 10).await.unwrap();
+    let got: Vec<(u8, RowStatus, Option<&str>)> =
+        rows.iter().map(|r| (r.field, r.status, r.value.as_deref())).collect();
+    assert_eq!(got, [(0, RowStatus::Ready, Some("tt0111161")), (1, RowStatus::Ready, Some("Q90"))]);
+}

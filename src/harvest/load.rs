@@ -62,7 +62,8 @@ pub async fn candidates(
         let wanted = clients.wdqs.items_in_classes(&items, &spec.instance_of).await.context("instance-of filter")?;
         excluded.not_instance = retain(&mut pages, |p| p.item.is_some_and(|q| wanted.contains(&q)));
     }
-    if spec.skip_if == SkipIf::Property {
+    // With several properties, a page may matter for one even if it has another.
+    if spec.skip_if == SkipIf::Property && spec.extra_properties.is_empty() {
         let items: Vec<ItemId> = pages.iter().filter_map(|p| p.item).collect();
         match clients.wdqs.items_with_property(job.property.id, &items).await {
             Ok(set) => excluded.already_set = retain(&mut pages, |p| !p.item.is_some_and(|q| set.contains(&q))),

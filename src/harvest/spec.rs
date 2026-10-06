@@ -15,6 +15,13 @@ pub enum SkipIf {
     Value,
 }
 
+/// Another property from the same template, in the same run (#111).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtraProperty {
+    pub property: PropertyId,
+    pub parameters: Vec<String>,
+}
+
 /// A qualifier added to every harvested statement (#210, #133).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QualifierSpec {
@@ -119,6 +126,8 @@ pub struct JobSpec {
     /// Constraints to check; `None` checks all. Mandatory ones are always checked.
     pub constraints: Option<Vec<ItemId>>,
     pub qualifiers: Vec<QualifierSpec>,
+    /// More properties to harvest from the same template (#111).
+    pub extra_properties: Vec<ExtraProperty>,
 }
 
 /// The original tool's default: only Gregorian-safe dates.
@@ -159,11 +168,31 @@ impl Default for JobSpec {
             skip_removed: true,
             constraints: None,
             qualifiers: vec![],
+            extra_properties: vec![],
         }
     }
 }
 
 impl JobSpec {
+    /// The spec for an extra property: the same pages and value options, its own
+    /// parameters; no other value source, transform, qualifiers or unit.
+    pub fn for_extra(&self, extra: &ExtraProperty) -> Self {
+        Self {
+            property: Some(extra.property),
+            parameters: extra.parameters.clone(),
+            value_pattern: String::new(),
+            date_parameters: None,
+            coordinate_parameters: None,
+            use_page_title: false,
+            transform: TransformSpec::default(),
+            unit: None,
+            constraints: None,
+            qualifiers: vec![],
+            extra_properties: vec![],
+            ..self.clone()
+        }
+    }
+
     /// Parse an old permalink, e.g. `?siteid=de&project=wikipedia&p=227&template=Normdaten&parameters=GND`.
     /// Unknown keys (`htid`, `run`, …) are ignored.
     pub fn from_legacy_query(pairs: &[(String, String)]) -> Self {
@@ -240,6 +269,9 @@ impl JobSpec {
                     spec.constraints = Some(split_pipes(v).iter().filter_map(|c| c.parse().ok()).collect());
                 }
                 "qualifier" => spec.qualifiers.extend(QualifierSpec::from_legacy(v)),
+                "also" => spec.extra_properties.extend(v.split_once('|').and_then(|(p, names)| {
+                    Some(ExtraProperty { property: p.parse().ok()?, parameters: split_commas(names) })
+                })),
                 _ => {}
             }
         }
@@ -349,6 +381,7 @@ impl JobSpec {
             q.push(("constraints", c.iter().map(ItemId::to_string).collect::<Vec<_>>().join("|")));
         }
         q.extend(self.qualifiers.iter().map(|qs| ("qualifier", qs.to_legacy())));
+        q.extend(self.extra_properties.iter().map(|e| ("also", format!("{}|{}", e.property, e.parameters.join(",")))));
         let pairs: Vec<String> = q.into_iter().map(|(k, v)| format!("{k}={}", urlencoding::encode(&v))).collect();
         pairs.join("&")
     }
@@ -449,6 +482,8 @@ mod tests {
         spec.value_pattern = "{1}-{2}".into();
         spec.unwrap_templates = true;
         spec.lead_only = true;
+        spec.extra_properties =
+            vec![ExtraProperty { property: PropertyId(570), parameters: vec!["death_date".into(), "died".into()] }];
         spec.skip_removed = false;
         spec.instance_of = vec![ItemId(571), ItemId(7725634)];
         spec.petscan = Some(4_242);

@@ -40,6 +40,8 @@ pub struct Job {
     pub qualifiers: Vec<PreparedQualifier>,
     /// Quantities: unit names and symbols (lower case) → unit, for values like `82 g`.
     pub units: HashMap<String, ItemId>,
+    /// More properties from the same template (#111), each prepared like a job of its own.
+    pub extras: Vec<Job>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +60,32 @@ pub enum PreparedSource {
 
 impl Job {
     pub async fn prepare(clients: &Clients, spec: JobSpec) -> Result<Self, JobError> {
+        let mut job = Self::prepare_one(clients, spec.clone(), true).await?;
+        for extra in &spec.extra_properties {
+            let extra_job = Self::prepare_one(clients, spec.for_extra(extra), false).await;
+            job.extras.push(extra_job.map_err(|e| match e {
+                JobError::Invalid(m) => invalid(format!("{}: {m}", extra.property)),
+                other => other,
+            })?);
+        }
+        Ok(job)
+    }
+
+    /// Field 0 is the main property, then the extras.
+    pub fn field(&self, index: u8) -> Option<&Self> {
+        match index {
+            0 => Some(self),
+            i => self.extras.get(usize::from(i) - 1),
+        }
+    }
+
+    pub fn field_count(&self) -> u8 {
+        u8::try_from(1 + self.extras.len()).unwrap_or(u8::MAX)
+    }
+
+    /// `main`: the unit must be allowed by the property. Extras have no unit of
+    /// their own, so their values must name one (`82 g`).
+    async fn prepare_one(clients: &Clients, spec: JobSpec, main: bool) -> Result<Self, JobError> {
         check_value_source(&spec)?;
         let transform = Transform::new(spec.transform.clone()).map_err(|e| invalid(format!("invalid regex: {e}")))?;
         let host = host_for(&spec.siteid, &spec.project).map_err(|e| invalid(e.to_string()))?;
@@ -69,7 +97,7 @@ impl Job {
         let property_id = spec.property.ok_or_else(|| invalid("choose a property"))?;
         let property = clients.wikidata.property(property_id).await?;
         let property = property.ok_or_else(|| invalid(format!("{property_id} does not exist")))?;
-        let datatype = check_property(&property, &spec)?;
+        let datatype = check_property(&property, &spec, main)?;
         let template_key = site.db_key(NS_TEMPLATE, &spec.template);
         let redirects = site.template_redirects(&clients.mw, &template_key).await?;
         let redirects = redirects.ok_or_else(|| invalid(format!("Template:{} does not exist", spec.template)))?;
@@ -82,7 +110,20 @@ impl Job {
         } else {
             HashMap::new()
         };
-        Ok(Self { spec, site, property, datatype, template_key, matcher, transform, constraints, qualifiers, units })
+        let extras = vec![];
+        Ok(Self {
+            spec,
+            site,
+            property,
+            datatype,
+            template_key,
+            matcher,
+            transform,
+            constraints,
+            qualifiers,
+            units,
+            extras,
+        })
     }
 }
 
@@ -181,14 +222,14 @@ fn check_value_source(spec: &JobSpec) -> Result<(), JobError> {
     Ok(())
 }
 
-fn check_property(property: &PropertyInfo, spec: &JobSpec) -> Result<Datatype, JobError> {
+fn check_property(property: &PropertyInfo, spec: &JobSpec, check_units: bool) -> Result<Datatype, JobError> {
     if property.deprecated {
         return Err(invalid(format!("{} is deprecated", property.id)));
     }
     let datatype =
         property.datatype.ok_or_else(|| invalid(format!("datatype {} is not supported", property.datatype_name)))?;
     match datatype {
-        Datatype::Quantity => check_unit(property, spec)?,
+        Datatype::Quantity if check_units => check_unit(property, spec)?,
         Datatype::Monolingual if !spec.use_page_title || !spec.language.is_empty() => check_language(&spec.language)?,
         Datatype::Monolingual => return Err(invalid("choose a language code")),
         _ => {}

@@ -35,6 +35,15 @@ message a user can see in the results table.
 11. **Edit**: one `wbeditentity` with references *imported from* (P143, the
    wiki's item) and *Wikimedia import URL* (P4656, the exact revision).
 
+## Several properties
+
+A run can harvest more properties from the same template ("also harvest").
+Each page then has a row per property, evaluated and edited separately. Extra
+properties use their own parameters and the run's value options (calendar,
+date limit, decimal mark, language), but not the transform, qualifiers or unit:
+their quantities must name a unit (`82 g`). The WDQS "already set" pre-filter
+is off for such runs; the live check before each edit still applies.
+
 ## Datatypes
 
 | Datatype | Rule |

@@ -1,4 +1,6 @@
-// Qualifiers for every harvested statement: a fixed value, or another parameter of the template.
+// A list of properties with their values: qualifiers for every harvested statement
+// (a fixed value, or another parameter of the template), or, with `extra`, more
+// properties to harvest from the same template (#111).
 import { reactive, watch } from 'vue';
 import { api } from './api.js';
 
@@ -6,11 +8,11 @@ const PLACEHOLDERS = { 'wikibase-item': 'Q1860', time: '2024-05-01', quantity: '
 const splitNames = (text) => text.split(',').map((n) => n.trim()).filter(Boolean);
 
 export default {
-  props: { modelValue: { type: Array, required: true } },
+  props: { modelValue: { type: Array, required: true }, extra: { type: Boolean, default: false } },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
     const rows = reactive(props.modelValue.map((q) => ({
-      property: q.property, source: q.source, value: q.value ?? '', names: (q.names ?? []).join(', '), info: null,
+      property: q.property, source: q.source ?? 'parameter', value: q.value ?? '', names: (q.names ?? q.parameters ?? []).join(', '), info: null,
     })));
     const lookup = async (row) => {
       row.info = null;
@@ -21,13 +23,16 @@ export default {
     // Only complete rows reach the spec.
     watch(rows, () => emit('update:modelValue', rows
       .filter((r) => /^P\d+$/.test(r.property) && (r.source === 'fixed' ? r.value.trim() : splitNames(r.names).length))
-      .map((r) => (r.source === 'fixed'
-        ? { property: r.property, source: 'fixed', value: r.value.trim() }
-        : { property: r.property, source: 'parameter', names: splitNames(r.names) }))), { deep: true });
+      .map((r) => {
+        if (props.extra) return { property: r.property, parameters: splitNames(r.names) };
+        return r.source === 'fixed'
+          ? { property: r.property, source: 'fixed', value: r.value.trim() }
+          : { property: r.property, source: 'parameter', names: splitNames(r.names) };
+      })), { deep: true });
 
     return {
       rows,
-      add: () => rows.push({ property: '', source: 'fixed', value: '', names: '', info: null }),
+      add: () => rows.push({ property: '', source: props.extra ? 'parameter' : 'fixed', value: '', names: '', info: null }),
       remove: (i) => rows.splice(i, 1),
       setProperty: (row, text) => {
         const m = text.trim().match(/^[Pp]?(\d+)$/);
@@ -41,12 +46,12 @@ export default {
 <div v-for="(row, i) in rows" class="mb-2">
   <div class="input-group input-group-sm">
     <input class="form-control ht-short" :value="row.property" @change="setProperty(row, $event.target.value)" placeholder="P407" aria-label="qualifier property">
-    <select v-model="row.source" class="form-select ht-short" aria-label="source">
+    <select v-if="!extra" v-model="row.source" class="form-select ht-short" aria-label="source">
       <option value="fixed">value</option>
       <option value="parameter">param</option>
     </select>
     <input v-if="row.source === 'fixed'" v-model="row.value" class="form-control" :placeholder="placeholder(row)">
-    <input v-else v-model="row.names" class="form-control" :placeholder="placeholder(row)">
+    <input v-else v-model="row.names" class="form-control" :placeholder="extra ? 'parameter, aliases' : placeholder(row)">
     <button type="button" class="btn btn-outline-secondary" @click="remove(i)" title="remove">×</button>
   </div>
   <div class="form-text">
@@ -54,5 +59,5 @@ export default {
     <span v-else-if="row.info">{{ row.info.label }} · {{ row.info.datatype }}<span v-if="!row.info.supported" class="text-danger"> · not supported</span></span>
   </div>
 </div>
-<button type="button" class="btn btn-sm btn-link px-0" @click="add">+ add qualifier</button>`,
+<button type="button" class="btn btn-sm btn-link px-0" @click="add">+ add {{ extra ? 'property' : 'qualifier' }}</button>`,
 };

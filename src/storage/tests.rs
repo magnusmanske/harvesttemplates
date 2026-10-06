@@ -27,7 +27,7 @@ async fn runs_rows_and_shares() {
     let run = store.run(id).await.unwrap().unwrap();
     assert_eq!((run.status, run.spec.clone(), run.editgroup.len()), (RunStatus::Loading, spec.clone(), 12));
 
-    store.add_rows(id, &pages(1200)).await.unwrap();
+    store.add_rows(id, &pages(600), 2).await.unwrap();
     store.set_excluded(id, &serde_json::json!({"no_item": 3})).await.unwrap();
     store.set_status(id, RunStatus::Editing, None).await.unwrap();
     let run = store.run(id).await.unwrap().unwrap();
@@ -37,6 +37,8 @@ async fn runs_rows_and_shares() {
 
     let batch = store.rows_to_process(id, &[RowStatus::Pending], None, 50).await.unwrap();
     assert_eq!((batch.len(), batch[0].seq, batch[0].title.as_str()), (50, 0, "Page 1 – ü"));
+    let fields: Vec<(u64, u8)> = batch[..4].iter().map(|r| (r.page_id, r.field)).collect();
+    assert_eq!(fields, [(1, 0), (1, 1), (2, 0), (2, 1)], "two properties: a row each, page by page");
     let update =
         RowUpdate { status: RowStatus::Done, item: Some("Q99"), raw_value: Some("r"), value: Some("v"), message: None };
     store.update_row(id, 0, &update).await.unwrap();

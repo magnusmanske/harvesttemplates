@@ -22,7 +22,7 @@ export default {
   setup(props) {
     const info = ref(null);
     const rows = ref([]);
-    const property = ref(null);
+    const properties = ref([]); // per field: the main property, then the extras
     const filter = ref('');
     const offset = ref(0);
     const error = ref('');
@@ -45,7 +45,11 @@ export default {
       clearTimeout(timer);
       try {
         info.value = await api(`/runs/${props.id}`);
-        if (!property.value) property.value = await api(`/property/${info.value.run.spec.property}`).catch(() => null);
+        if (!properties.value.length) {
+          const spec = info.value.run.spec;
+          const ids = [spec.property, ...(spec.extra_properties ?? []).map((e) => e.property)];
+          properties.value = await Promise.all(ids.map((p) => api(`/property/${p}`).catch(() => ({ id: p }))));
+        }
         const status = filter.value ? `&status=${filter.value}` : '';
         rows.value = await api(`/runs/${props.id}/rows?offset=${offset.value}&limit=${PAGE_SIZE}${status}`);
         error.value = '';
@@ -87,7 +91,7 @@ export default {
 
     return {
       info, run, counts, total, rows, filter, offset, error, busy, isOwner, canWork, progress, excluded, FILTERS, PAGE_SIZE,
-      refresh, share, login, pageUrl, entityUrl, editGroupUrl, formatTime, statusColor, rowStatusLabel, property, valueUrl,
+      refresh, share, login, pageUrl, entityUrl, editGroupUrl, formatTime, statusColor, rowStatusLabel, properties, valueUrl,
       preview: () => act('preview'),
       start: () => act('start', `Add up to ${(counts.value.pending + counts.value.ready).toLocaleString()} statements to Wikidata as ${user.value}?`),
       stop: () => act('stop'),
@@ -99,7 +103,7 @@ export default {
 <div v-else>
   <div class="d-flex flex-wrap align-items-baseline gap-2 mb-2">
     <h1 class="h4 mb-0">Run {{ run.id }}</h1>
-    <span class="text-muted">{{ run.spec.property }} from {{ run.spec.template }} on {{ info.host }}</span>
+    <span class="text-muted">{{ properties.map((p) => p.id).join(', ') || run.spec.property }} from {{ run.spec.template }} on {{ info.host }}</span>
     <span class="badge" :class="'text-bg-' + statusColor(run.status)">{{ run.status }}</span>
     <span class="text-muted small ms-auto">by {{ run.user_name }}, {{ formatTime(run.created) }}</span>
   </div>
@@ -115,7 +119,7 @@ export default {
       <div class="progress-bar bg-danger" :style="{ width: (100 * counts.error / (total || 1)) + '%' }">{{ counts.error || '' }}</div>
     </div>
     <p class="small text-muted mb-2">
-      {{ total.toLocaleString() }} candidate pages<span v-if="excluded.length">; left out: {{ excluded.join(', ') }}</span>.
+      {{ (total / (properties.length || 1)).toLocaleString() }} candidate pages<span v-if="properties.length > 1"> × {{ properties.length }} properties</span><span v-if="excluded.length">; left out: {{ excluded.join(', ') }}</span>.
     </p>
   </template>
 
@@ -141,19 +145,20 @@ export default {
   </ul>
   <div class="table-responsive">
     <table class="table table-sm ht-rows mb-1">
-      <thead><tr><th>Page</th><th>Item</th><th>Template value</th><th>Value</th><th>Result</th></tr></thead>
+      <thead><tr><th>Page</th><th>Item</th><th v-if="properties.length > 1">Property</th><th>Template value</th><th>Value</th><th>Result</th></tr></thead>
       <tbody>
         <tr v-for="r in rows" :key="r.seq" :class="'ht-row-' + r.status">
           <td><a :href="pageUrl(info.host, r.title)" target="_blank" rel="noopener">{{ r.title }}</a></td>
           <td><a v-if="r.item" :href="entityUrl(r.item)" target="_blank" rel="noopener">{{ r.item }}</a></td>
+          <td v-if="properties.length > 1" :title="properties[r.field]?.label">{{ properties[r.field]?.id }}</td>
           <td class="ht-value">{{ r.raw_value }}</td>
           <td class="ht-value">
-            <a v-if="valueUrl(property, r.value)" :href="valueUrl(property, r.value)" target="_blank" rel="noopener">{{ r.value }}</a>
+            <a v-if="valueUrl(properties[r.field], r.value)" :href="valueUrl(properties[r.field], r.value)" target="_blank" rel="noopener">{{ r.value }}</a>
             <template v-else>{{ r.value }}</template>
           </td>
           <td><span class="badge" :class="'text-bg-' + statusColor(r.status)">{{ rowStatusLabel(r.status) }}</span> {{ r.message }}</td>
         </tr>
-        <tr v-if="!rows.length"><td colspan="5" class="text-muted">No pages.</td></tr>
+        <tr v-if="!rows.length"><td colspan="6" class="text-muted">No pages.</td></tr>
       </tbody>
     </table>
   </div>

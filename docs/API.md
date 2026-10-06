@@ -69,6 +69,7 @@ Row status: `pending`, `ready` (previewed, would be added), `done`, `skipped`, `
   "category": "2024 films", "depth": 1, "manual_list": [],
   "skip_if": "property",
   "constraints": null,
+  "extra_properties": [{"property": "P570", "parameters": ["death_date", "died"]}],
   "qualifiers": [
     {"property": "P407", "source": "fixed", "value": "Q1860"},
     {"property": "P10135", "source": "parameter", "names": ["date"]}
@@ -82,6 +83,8 @@ accepts every redirect; `constraints: null` checks every supported constraint.
 Also: `skip_removed` (default `true`), `petscan` (a saved query's PSID: pages of the same wiki, or Wikidata items), `sparql` (a query selecting `?item`), `instance_of` (Q-ids; subclasses count), `archive_urls` (`original`, `skip`, `keep`), `value_pattern` (`"{1}-{2}"`), `unwrap_templates`, `lead_only` (booleans),
 and `transform.case` (`unchanged`, `lower`, `upper`).
 `coordinate_parameters` is `{"latitude": "…", "longitude": "…"}` (permalink: `latparam`, `lonparam`).
+Rows of runs with `extra_properties` have a `field`: 0 for the main property,
+then the extras in order (permalink: `also=P570|death_date,died`).
 Fixed qualifier values are written as on Wikidata: `Q1860`, `2024-05-01`, `42`,
 or `text@language` for monolingual text. In permalinks a qualifier is
 `qualifier=P407|fixed|Q1860` or `qualifier=P10135|param|date,datum`.

@@ -299,6 +299,10 @@ export default {
         <h2 class="h5 mt-4">Qualifiers</h2>
         <qualifier-editor v-model="spec.qualifiers" />
 
+        <h2 class="h5 mt-4">Also harvest</h2>
+        <div class="form-text mt-0 mb-1">More properties from the same template, with the same value options.</div>
+        <qualifier-editor v-model="spec.extra_properties" extra />
+
         <h2 class="h5 mt-4">Modify values</h2>
         <div class="row g-1">
           <div class="col-6"><input v-model="spec.transform.add_prefix" class="form-control form-control-sm" placeholder="add prefix"></div>

@@ -44,6 +44,8 @@ pub struct RowRecord {
     pub page_id: u64,
     pub title: String,
     pub item: Option<String>,
+    /// Which property: 0 is the main one, then the extras (#111).
+    pub field: u8,
     pub status: RowStatus,
     pub raw_value: Option<String>,
     pub value: Option<String>,
@@ -213,16 +215,26 @@ impl Store {
         Ok(())
     }
 
-    pub async fn add_rows(&self, id: u64, pages: &[Page]) -> Result<()> {
+    /// One row per page and field (property); consecutive `seq`s keep a page's rows together.
+    pub async fn add_rows(&self, id: u64, pages: &[Page], fields: u8) -> Result<()> {
+        let rows: Vec<(&Page, u8)> = pages.iter().flat_map(|p| (0..fields).map(move |f| (p, f))).collect();
         let mut conn = self.conn().await?;
-        for (chunk_no, chunk) in pages.chunks(INSERT_CHUNK).enumerate() {
-            let placeholders = vec!["(?, ?, ?, ?, ?, 'pending')"; chunk.len()].join(", ");
-            let sql = format!("INSERT INTO run_row (run_id, seq, page_id, title, item, status) VALUES {placeholders}");
-            let mut values: Vec<Value> = Vec::with_capacity(chunk.len() * 5);
-            for (i, page) in chunk.iter().enumerate() {
+        for (chunk_no, chunk) in rows.chunks(INSERT_CHUNK).enumerate() {
+            let placeholders = vec!["(?, ?, ?, ?, ?, ?, 'pending')"; chunk.len()].join(", ");
+            let sql =
+                format!("INSERT INTO run_row (run_id, seq, page_id, title, item, field, status) VALUES {placeholders}");
+            let mut values: Vec<Value> = Vec::with_capacity(chunk.len() * 6);
+            for (i, (page, field)) in chunk.iter().enumerate() {
                 let seq = (chunk_no * INSERT_CHUNK + i) as u32;
                 let item = page.item.map(|q| q.to_string());
-                values.extend([id.into(), seq.into(), page.id.into(), page.title.clone().into(), item.into()]);
+                values.extend([
+                    id.into(),
+                    seq.into(),
+                    page.id.into(),
+                    page.title.clone().into(),
+                    item.into(),
+                    (*field).into(),
+                ]);
             }
             conn.exec_drop(sql, values).await?;
         }
@@ -381,7 +393,7 @@ impl Store {
 
 const RUN_COLUMNS: &str =
     "id, user_id, user_name, share_id, spec, status, editgroup, excluded, message, created, started, finished";
-const ROW_COLUMNS: &str = "seq, page_id, title, item, status, raw_value, value, message";
+const ROW_COLUMNS: &str = "seq, page_id, title, item, field, status, raw_value, value, message";
 const SHARE_COLUMNS: &str =
     "id, user_id, user_name, title, spec, created, last_run_id, last_completed, last_done, last_errors, legacy_id";
 
@@ -424,6 +436,7 @@ fn row_from_row(mut row: Row) -> Result<RowRecord> {
         page_id: take(&mut row, "page_id")?,
         title: take(&mut row, "title")?,
         item: take(&mut row, "item")?,
+        field: take(&mut row, "field")?,
         status: RowStatus::parse(&status).unwrap_or(RowStatus::Error),
         raw_value: take(&mut row, "raw_value")?,
         value: take(&mut row, "value")?,
