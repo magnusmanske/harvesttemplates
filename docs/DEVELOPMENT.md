@@ -96,8 +96,9 @@ toolforge webservice buildservice start --mount=all
 `--mount=all` gives the container the tool's home, where the config,
 credentials and sessions live.
 
-**Shared queries of the old tool** (`?htid=` links) are imported once, keeping
-their ids; repeating it only adds new ones. It takes a few minutes:
+**Shared queries of the old tool** (`?htid=` links): all 621 were imported on
+2026-10-06, keeping their ids. Repeating the import only adds queries saved in
+the old tool since then (a few minutes):
 
 ```sh
 toolforge jobs run import-shares --wait --mount=all \

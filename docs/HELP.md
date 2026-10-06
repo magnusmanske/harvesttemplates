@@ -77,7 +77,8 @@ run, where they can be reviewed or undone. Every message is explained in
 to the same settings. **Other wikis** (on a run) lists the template on other
 language versions, each linking to the same settings there; check the parameter
 names, as they often differ by language. **Share publicly** adds the query to the shared list,
-with optional tags; `#/shares/TAG` lists one tag.
+with optional tags; `#/shares/TAG` lists one tag. The old tool's shared queries
+are there too, and its links (`index.html?htid=…`) still work.
 
 ## Good to know
 

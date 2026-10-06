@@ -6,7 +6,7 @@ Add an entry under *Unreleased* with every change.
 ## Unreleased
 
 ### Added
-- The old tool's shared queries are imported with their ids, so
+- The old tool's 621 shared queries are imported with their ids, so
   `index.html?htid=…` links work again and load like they used to.
 - Values that someone removed from an item before are not added again (#89).
 - Several properties from the same template in one run (#111).

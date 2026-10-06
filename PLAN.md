@@ -231,8 +231,9 @@ share      id, user_name, spec JSON, title, created, last_completed_run, runs_ok
 share_tag  share_id, tag
 ```
 `run_item` gives resume, CSV log, and red/green counts on the share page (#141).
-Shares store the full spec, so aliases are no longer lost (#157). Migration of
-the existing `ht_share` rows needs a dump from the `pltools` maintainers.
+Shares store the full spec, so aliases are no longer lost (#157). The old
+`ht_share` rows were imported over HTTP (the `pltools` database is not public),
+keeping their ids in `share.legacy_id`.
 
 ### 3.3 Run lifecycle
 
@@ -408,5 +409,5 @@ continuation), `parse_wiki_text_2`.
   in memory; after a restart, interrupted runs come back as *paused* and the
   owner resumes them from their (persistent) session.
 
-Still open: an `ht_share` dump from the
-`pltools` maintainers for migrating saved queries.
+- The old tool's 621 shared queries were imported on 2026-10-06
+  (`import-legacy-shares`); `?htid=` links work again.
