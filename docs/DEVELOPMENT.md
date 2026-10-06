@@ -80,11 +80,18 @@ Not deployed yet; this is the intended setup. The tool is built with the
 Toolforge build service; `Procfile` starts the web server with
 `$TOOL_DATA_DIR/config.json`.
 
+In the tool's home (`/data/project/harvesttemplates`):
+
+- `config.json`: a copy of [`config.toolforge.json`](../config.toolforge.json)
+  (production hosts, sessions on NFS, no secrets)
+- `replica.my.cnf`: provided by Toolforge
+- `oauth.ini`: the OAuth 2 client
+
 ```sh
+cp config.toolforge.json /data/project/harvesttemplates/config.json   # or paste it
 toolforge build start https://github.com/magnusmanske/harvesttemplates
 toolforge webservice buildservice start --mount=all
 ```
 
-In `$TOOL_DATA_DIR`: `config.json` (the template's hosts are the production
-ones; set `server.session_dir` to an absolute path there), `replica.my.cnf`
-(provided by Toolforge) and `oauth.ini`.
+`--mount=all` gives the container the tool's home, where the config,
+credentials and sessions live.

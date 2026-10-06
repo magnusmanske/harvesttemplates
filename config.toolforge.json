@@ -1,0 +1,30 @@
+{
+  "user_agent": "HarvestTemplates/0.1 (https://harvesttemplates.toolforge.org; https://github.com/magnusmanske/harvesttemplates)",
+  "db_credentials": "replica.my.cnf",
+  "oauth_file": "oauth.ini",
+  "server": {
+    "html_dir": "html",
+    "session_dir": "/data/project/harvesttemplates/sessions",
+    "session_lifetime_days": 30,
+    "cookie_secure": true
+  },
+  "tool_db": {
+    "host": "tools.db.svc.wikimedia.cloud",
+    "port": 3306,
+    "database": "{user}__harvesttemplates",
+    "max_connections": 4
+  },
+  "replicas": {
+    "host_pattern": "{dbname}.analytics.db.svc.wikimedia.cloud",
+    "port": 3306,
+    "overrides": {},
+    "max_connections_per_wiki": 2
+  },
+  "harvest": {
+    "edit_interval_ms": 1000,
+    "max_active_runs_per_user": 2,
+    "max_candidates": 500000,
+    "max_category_depth": 30,
+    "max_categories": 20000
+  }
+}

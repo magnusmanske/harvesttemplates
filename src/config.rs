@@ -213,6 +213,15 @@ mod tests {
     }
 
     #[test]
+    fn toolforge_config_is_valid() {
+        let cfg: Config = serde_json::from_str(include_str!("../config.toolforge.json")).unwrap();
+        assert!(cfg.server.cookie_secure);
+        assert!(cfg.server.session_dir.is_absolute(), "sessions must survive restarts on NFS");
+        assert_eq!(cfg.tool_db.host, "tools.db.svc.wikimedia.cloud");
+        assert!(cfg.replicas.overrides.is_empty());
+    }
+
+    #[test]
     fn missing_credentials_are_explained() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.json");
