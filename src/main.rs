@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use harvesttemplates::{api, app_state::AppState, config::Config, legacy_shares};
+use harvesttemplates::{api, app_state::AppState, config::Config, legacy_shares, telemetry};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
@@ -50,6 +50,7 @@ async fn main() -> Result<()> {
     }
     state.store.migrate().await?;
     state.store.recover_after_restart().await?;
+    telemetry::start();
     api::serve(state, cli.port).await
 }
 

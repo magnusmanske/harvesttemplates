@@ -48,6 +48,7 @@ pub fn router(state: SharedState) -> Router {
     let callback = auth::callback_path(&state.config.oauth.callback_url);
     let static_files = ServeDir::new(&state.config.server.html_dir);
     let middleware = ServiceBuilder::new()
+        .layer(middleware::from_fn(crate::telemetry::record_request))
         .layer(TraceLayer::new_for_http())
         .layer(CatchPanicLayer::new())
         .layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_TIMEOUT))

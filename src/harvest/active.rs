@@ -39,7 +39,9 @@ impl Claim {
 
 impl Drop for Claim {
     fn drop(&mut self) {
-        self.runs.lock().remove(&self.run_id);
+        let mut runs = self.runs.lock();
+        runs.remove(&self.run_id);
+        crate::telemetry::set_active_runs(runs.len());
     }
 }
 
@@ -58,6 +60,7 @@ impl ActiveRuns {
         }
         let stop = Arc::new(AtomicBool::new(false));
         runs.insert(run_id, Active { user_id, stop: stop.clone() });
+        crate::telemetry::set_active_runs(runs.len());
         Ok(Claim { runs: self.clone(), run_id, stop })
     }
 

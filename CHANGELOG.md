@@ -5,6 +5,11 @@ Add an entry under *Unreleased* with every change.
 
 ## Unreleased
 
+### Added
+- Health and metrics go to the Buggregator service dashboard when `DASHBOARD_TOKEN` is set:
+  requests, runs by phase and outcome, rows (edits made, skipped, errors), edit back-offs, and
+  active runs. Without the token nothing changes.
+
 ## 0.3.0 – 2026-10-06
 
 ### Added

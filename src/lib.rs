@@ -25,6 +25,7 @@ pub mod http;
 pub mod ids;
 pub mod legacy_shares;
 pub mod storage;
+pub mod telemetry;
 #[cfg(test)]
 pub(crate) mod test_support;
 pub mod value;

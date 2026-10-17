@@ -8,6 +8,7 @@ use super::status::{RowStatus, RunStatus};
 use crate::app_state::AppState;
 use crate::auth::{EditError, Editor};
 use crate::storage::{RowRecord, RowUpdate, RunRecord};
+use crate::telemetry;
 use crate::wiki::Page;
 use crate::wiki::content::{self, Revision};
 use anyhow::{Result, bail};
@@ -24,6 +25,7 @@ pub async fn load(app: Arc<AppState>, run_id: u64, job: Job, claim: Claim) {
         Ok(()) => (RunStatus::Ready, None),
         Err(e) => (RunStatus::Failed, Some(format!("{e:#}"))),
     };
+    telemetry::record_run("load", status.0.as_str());
     set_final_status(&app, run_id, status).await;
     drop(claim);
 }
@@ -50,6 +52,14 @@ pub enum Mode {
 }
 
 impl Mode {
+    /// For metrics: `preview` or `edit`.
+    const fn name(&self) -> &'static str {
+        match self {
+            Self::Preview => "preview",
+            Self::Edit(_) => "edit",
+        }
+    }
+
     const fn statuses(&self) -> &'static [RowStatus] {
         match self {
             Self::Preview => &[RowStatus::Pending],
@@ -106,6 +116,7 @@ impl Worker {
             Err(e) => (RunStatus::Failed, Some(format!("{e:#}"))),
         };
         tracing::info!("run {id}: {}", status.as_str());
+        telemetry::record_run(self.mode.name(), status.as_str());
         if let Err(e) = self.finish(status, message.as_deref()).await {
             tracing::error!("run {id}: cannot store status: {e:#}");
         }
@@ -171,6 +182,7 @@ impl Worker {
             message: message.as_deref(),
         };
         self.app.store.update_row(self.run.id, row.seq, &update).await?;
+        telemetry::record_row(self.mode.name(), status.as_str());
         Ok(Flow::Continue)
     }
 
@@ -188,10 +200,12 @@ impl Worker {
                     tokio::time::sleep(interval).await;
                     return Ok(Saved::Ok(RowStatus::Done));
                 }
-                Err(EditError::Busy(wait)) if !wait_unless_stopped(&self.claim, wait).await => {
-                    return Ok(Saved::Stopped);
+                Err(EditError::Busy(wait)) => {
+                    telemetry::record_edit_wait();
+                    if !wait_unless_stopped(&self.claim, wait).await {
+                        return Ok(Saved::Stopped);
+                    }
                 }
-                Err(EditError::Busy(_)) => {}
                 Err(EditError::Rejected(m)) => return Ok(Saved::Rejected(m)),
                 Err(EditError::Fatal(m)) => bail!("{m}"),
                 Err(EditError::Failed(e)) => {
