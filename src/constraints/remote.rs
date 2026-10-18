@@ -5,6 +5,7 @@ use super::{Candidate, Services};
 use crate::ids::{ItemId, PropertyId};
 use crate::value::{Value, sparql_term};
 use crate::wiki::api::params;
+use crate::wikidata::wdqs::INSTANCE_OF as INSTANCE_OF_PATH;
 use crate::wikidata::{ConstraintDef, HOST};
 use anyhow::Result;
 
@@ -41,24 +42,24 @@ impl Remote {
             (Self::ConflictsWith, _) => conflicts_with(def, c, s).await,
             (Self::Distinct, _) => distinct(c, s).await,
             (Self::Inverse, Some(v)) => match def.first_property(PROPERTY) {
-                Some(inverse) => Ok(!s.wdqs.ask(&format!("ASK {{ wd:{v} wdt:{inverse} wd:{q} }}")).await?),
+                Some(inverse) => Ok(!s.wdqs.ask_either(&format!("ASK {{ wd:{v} wdt:{inverse} wd:{q} }}")).await?),
                 None => Ok(false),
             },
             (Self::Symmetric, Some(v)) => {
-                Ok(!s.wdqs.ask(&format!("ASK {{ wd:{v} wdt:{} wd:{q} }}", c.property)).await?)
+                Ok(!s.wdqs.ask_either(&format!("ASK {{ wd:{v} wdt:{} wd:{q} }}", c.property)).await?)
             }
             (Self::Type, _) => {
                 let direct = c.item.item_values(INSTANCE_OF);
                 if relation(def) != "wdt:P279" && def.items(CLASS).iter().any(|class| direct.contains(class)) {
                     return Ok(false);
                 }
-                in_class(&format!("wd:{q}"), def, s).await.map(|ok| !ok)
+                in_class(q, def, s).await.map(|ok| !ok)
             }
-            (Self::ValueType, Some(v)) => in_class(&format!("wd:{v}"), def, s).await.map(|ok| !ok),
+            (Self::ValueType, Some(v)) => in_class(v, def, s).await.map(|ok| !ok),
             (Self::ValueRequiresStatement, Some(v)) => match def.first_property(PROPERTY) {
                 Some(required) => {
                     let sparql = format!("ASK {{ wd:{v} wdt:{required} {} }}", object_filter(def));
-                    Ok(!s.wdqs.ask(&sparql).await?)
+                    Ok(!s.wdqs.ask_either(&sparql).await?)
                 }
                 None => Ok(false),
             },
@@ -81,18 +82,16 @@ fn relation(def: &ConstraintDef) -> &'static str {
     match def.items(RELATION).first() {
         Some(&RELATION_SUBCLASS) => "wdt:P279",
         Some(&RELATION_EITHER) => "(wdt:P31|wdt:P279)",
-        _ => "wdt:P31",
+        _ => INSTANCE_OF_PATH,
     }
 }
 
-async fn in_class(subject: &str, def: &ConstraintDef, s: Services<'_>) -> Result<bool> {
-    let classes: Vec<String> = def.items(CLASS).iter().map(|c| format!("wd:{c}")).collect();
+async fn in_class(subject: ItemId, def: &ConstraintDef, s: Services<'_>) -> Result<bool> {
+    let classes = def.items(CLASS);
     if classes.is_empty() {
         return Ok(true);
     }
-    let sparql =
-        format!("ASK {{ VALUES ?class {{ {} }} {subject} {}/wdt:P279* ?class }}", classes.join(" "), relation(def));
-    s.wdqs.ask(&sparql).await
+    Ok(s.wdqs.items_in_classes(&[subject], relation(def), &classes).await?.contains(&subject))
 }
 
 /// The file or page must exist on Commons, in the namespace the constraint names (#23).
@@ -111,20 +110,26 @@ async fn commons_link(def: &ConstraintDef, c: &Candidate<'_>, s: Services<'_>) -
 }
 
 /// Our property says it conflicts with another statement on the item, or a
-/// property on the item says it conflicts with ours.
+/// property on the item says it conflicts with ours. The item's properties come
+/// from the item itself, so this works whichever graph holds it.
 async fn conflicts_with(def: &ConstraintDef, c: &Candidate<'_>, s: Services<'_>) -> Result<bool> {
     let ours = def.first_property(PROPERTY);
     if ours.is_some_and(|other| has_statement(c, other, &def.items(ITEM_OF_CONSTRAINT))) {
         return Ok(true);
+    }
+    let properties: Vec<String> = c.item.property_ids().iter().map(|p| format!("wd:{p}")).collect();
+    if properties.is_empty() {
+        return Ok(false);
     }
     let value_filter = match sparql_term(c.value, c.datatype) {
         Some(term) => format!("FILTER(!BOUND(?v) || ?v = {term})"),
         None => "FILTER(!BOUND(?v))".to_string(),
     };
     let sparql = format!(
-        "ASK {{ wd:{} ?claim [] . ?prop wikibase:claim ?claim ; p:P2302 ?c . \
+        "ASK {{ VALUES ?prop {{ {} }} ?prop p:P2302 ?c . \
          ?c ps:P2302 wd:Q21502838 ; pq:P2306 wd:{} . OPTIONAL {{ ?c pq:P2305 ?v }} {value_filter} }}",
-        c.item.id, c.property
+        properties.join(" "),
+        c.property
     );
     s.wdqs.ask(&sparql).await
 }
@@ -142,7 +147,8 @@ async fn distinct(c: &Candidate<'_>, s: Services<'_>) -> Result<bool> {
             return Ok(false);
         };
         let p = c.property;
-        return s.wdqs.ask(&format!("ASK {{ ?item p:{p}/ps:{p} {term} . FILTER(?item != wd:{}) }}", c.item.id)).await;
+        let sparql = format!("ASK {{ ?item p:{p}/ps:{p} {term} . FILTER(?item != wd:{}) }}", c.item.id);
+        return s.wdqs.ask_either(&sparql).await;
     };
     let query = format!("haswbstatement:{}={key}", c.property);
     let p = params(&[("action", "query"), ("list", "search"), ("srsearch", &query), ("srlimit", "5"), ("srprop", "")]);
@@ -183,7 +189,8 @@ mod tests {
             .mount(&server)
             .await;
         let http = reqwest::Client::new();
-        let (mw, wdqs) = (MwApi::with_base_url(http.clone(), server.uri()), Wdqs::new(http, &server.uri()));
+        let endpoint = || wikimisc::sparql_endpoint::SparqlEndpoint::new(server.uri());
+        let (mw, wdqs) = (MwApi::with_base_url(http.clone(), server.uri()), Wdqs::new(http, endpoint(), endpoint()));
         let s = Services { wdqs: &wdqs, mw: &mw };
         let item = Entity::new(json!({"id": "Q1", "claims": {}})).unwrap();
         for (value, expected) in [("tt1", false), ("tt2", true)] {
@@ -214,7 +221,7 @@ mod tests {
         let http =
             crate::app_state::http_client("HarvestTemplates tests (https://github.com/magnusmanske/harvesttemplates)")
                 .unwrap();
-        let (mw, wdqs) = (MwApi::new(http.clone()), Wdqs::new(http, crate::wikidata::wdqs::ENDPOINT));
+        let (mw, wdqs) = (MwApi::new(http.clone()), Wdqs::wikidata(http));
         let s = Services { wdqs: &wdqs, mw: &mw };
         let item = |c| Entity::new(json!({"id": "Q42", "claims": c})).unwrap();
         let human = def(json!({"P2308": [{"snaktype": "value", "datavalue": {"value": {"id": "Q5"}}}]}));

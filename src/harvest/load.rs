@@ -59,7 +59,11 @@ pub async fn candidates(
     excluded.no_item = retain(&mut pages, |p| p.item.is_some());
     if !spec.instance_of.is_empty() {
         let items: Vec<ItemId> = pages.iter().filter_map(|p| p.item).collect();
-        let wanted = clients.wdqs.items_in_classes(&items, &spec.instance_of).await.context("instance-of filter")?;
+        let wanted = clients
+            .wdqs
+            .items_in_classes(&items, crate::wikidata::wdqs::INSTANCE_OF, &spec.instance_of)
+            .await
+            .context("instance-of filter")?;
         excluded.not_instance = retain(&mut pages, |p| p.item.is_some_and(|q| wanted.contains(&q)));
     }
     // With several properties, a page may matter for one even if it has another.

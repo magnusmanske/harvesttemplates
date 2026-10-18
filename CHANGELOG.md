@@ -10,6 +10,13 @@ Add an entry under *Unreleased* with every change.
   requests, runs by phase and outcome, rows (edits made, skipped, errors), edit back-offs, and
   active runs. Without the token nothing changes.
 
+### Fixed
+- Scholarly articles, which Wikidata's query service keeps in a separate graph, are no longer
+  missed: the "instance of" filter and the type, value type, inverse, symmetric, required
+  statement and distinct-value checks look there too, instead of reporting false violations.
+- A query that times out is reported at once instead of being retried, and the query service's
+  own error message is shown. An unexpected reply to a yes/no check is an error, not a violation.
+
 ## 0.3.0 – 2026-10-06
 
 ### Added

@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::harvest::ActiveRuns;
 use crate::storage::Store;
 use crate::wiki::{ApiSource, Limits, MwApi, PageSource, PetScan, Replicas, WithFallback, petscan};
-use crate::wikidata::{Wdqs, Wikidata, wdqs};
+use crate::wikidata::{Wdqs, Wikidata};
 use anyhow::{Context, Result};
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,7 +22,7 @@ impl Clients {
         let mw = MwApi::new(http.clone());
         Self {
             wikidata: Wikidata { api: mw.clone() },
-            wdqs: Wdqs::new(http.clone(), wdqs::ENDPOINT),
+            wdqs: Wdqs::wikidata(http.clone()),
             petscan: PetScan::new(http.clone(), petscan::BASE_URL),
             mw,
         }
@@ -34,7 +34,11 @@ impl Clients {
         let mw = MwApi::with_base_url(http.clone(), url.to_string());
         Self {
             wikidata: Wikidata { api: mw.clone() },
-            wdqs: Wdqs::new(http.clone(), url),
+            wdqs: Wdqs::new(
+                http.clone(),
+                wikimisc::sparql_endpoint::SparqlEndpoint::new(url),
+                wikimisc::sparql_endpoint::SparqlEndpoint::new(url),
+            ),
             petscan: PetScan::new(http, url),
             mw,
         }
