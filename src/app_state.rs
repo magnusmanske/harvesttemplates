@@ -68,7 +68,7 @@ impl AppState {
         let http = http_client(&config.user_agent)?;
         let clients = Clients::new(&http);
         let fallback = ApiSource { api: clients.mw.clone() };
-        let pages = WithFallback { primary: Replicas::new(config.replicas.clone(), config.db_user.clone()), fallback };
+        let pages = WithFallback { primary: Replicas::new(&config.replicas, &config.db_credentials)?, fallback };
         let session_dir = &config.server.session_dir;
         let sessions = FileSessionStore::new(session_dir.clone())
             .with_context(|| format!("cannot create session directory {}", session_dir.display()))?;

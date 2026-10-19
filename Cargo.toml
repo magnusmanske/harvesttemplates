@@ -18,7 +18,6 @@ dashmap = "6"
 fancy-regex = "0.19"
 futures = "0.3"
 moka = { version = "0.12", features = ["future"] }
-mysql_async = "0.37"
 rand = "0.10"
 regex = "1"
 reqwest = { version = "0.13", features = ["json", "gzip", "form", "query"] }
@@ -33,7 +32,7 @@ tower-sessions = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 urlencoding = "2"
-wikimisc = { git = "https://github.com/magnusmanske/wikimisc", features = ["sparql-client", "telemetry"] }
+wikimisc = { git = "https://github.com/magnusmanske/wikimisc", features = ["sparql-client", "telemetry", "database"] }
 
 [dev-dependencies]
 tempfile = "3"

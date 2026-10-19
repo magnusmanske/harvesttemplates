@@ -1,60 +1,52 @@
 use super::pages::{CategoryStep, Limits, Page, PageSource};
 use super::site::{NS_CATEGORY, Site};
-use crate::config::{DbUser, ReplicaConfig};
+use crate::config::ReplicaConfig;
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
-use dashmap::DashMap;
-use mysql_async::prelude::Queryable;
-use mysql_async::{Conn, OptsBuilder, Pool, PoolConstraints, PoolOpts};
+use std::path::Path;
 use std::time::Duration;
+use wikimisc::mysql_async::Conn;
+use wikimisc::mysql_async::prelude::Queryable;
+use wikimisc::toolforge::db::Cluster;
+use wikimisc::toolforge::pool::WikiPool;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_STATEMENT_TIME: Duration = Duration::from_secs(300);
 const IN_LIST_CHUNK: usize = 500;
 
-/// One lazily created connection pool per wiki replica.
-pub struct Replicas {
-    config: ReplicaConfig,
-    user: DbUser,
-    pools: DashMap<String, Pool>,
-}
+/// The tables each query reads, so the connection goes to the database that has
+/// up-to-date copies of them: some wikis moved tables to extension databases,
+/// e.g. Commons its links tables, and left frozen copies behind.
+const TRANSCLUSION_TABLES: &[&str] = &["linktarget", "templatelinks", "page", "page_props"];
+const CATEGORY_TABLES: &[&str] = &["linktarget", "categorylinks", "page"];
 
-impl std::fmt::Debug for Replicas {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Replicas").field("config", &self.config).finish_non_exhaustive()
-    }
+/// Connections to the wiki replicas, one pool per database server.
+#[derive(Debug)]
+pub struct Replicas {
+    pool: WikiPool,
 }
 
 impl Replicas {
-    pub fn new(config: ReplicaConfig, user: DbUser) -> Self {
-        Self { config, user, pools: DashMap::new() }
+    /// `credentials` is the `replica.my.cnf` with the database user and password.
+    pub fn new(config: &ReplicaConfig, credentials: &Path) -> Result<Self> {
+        let pool = WikiPool::builder(Cluster::Analytics)
+            .my_cnf_path(credentials)
+            .pool_max(config.max_connections)
+            .connect_timeout(CONNECT_TIMEOUT)
+            .max_statement_time(MAX_STATEMENT_TIME)
+            .build()
+            .with_context(|| format!("cannot read the replica credentials from {}", credentials.display()))?;
+        Ok(Self { pool })
     }
 
-    async fn conn(&self, dbname: &str) -> Result<Conn> {
-        let pool = self.pools.entry(dbname.to_string()).or_insert_with(|| self.new_pool(dbname)).clone();
-        tokio::time::timeout(CONNECT_TIMEOUT, pool.get_conn())
+    /// A connection to the database of `dbname` that has all of `tables`. Commons
+    /// keeps `templatelinks` and `page_props` in different databases, so its
+    /// transclusions fail here and come from the API instead (see `WithFallback`).
+    async fn conn(&self, dbname: &str, tables: &[&str]) -> Result<Conn> {
+        self.pool
+            .connect_for_tables(dbname, tables)
             .await
-            .with_context(|| format!("timeout connecting to the {dbname} replica"))?
             .with_context(|| format!("cannot connect to the {dbname} replica"))
-    }
-
-    fn new_pool(&self, dbname: &str) -> Pool {
-        let c = &self.config;
-        let (host, port) = match c.overrides.get(dbname).and_then(|o| o.rsplit_once(':')) {
-            Some((host, port)) => (host.to_string(), port.parse().unwrap_or(c.port)),
-            None => (c.host_pattern.replace("{dbname}", dbname), c.port),
-        };
-        let constraints = PoolConstraints::new(0, c.max_connections_per_wiki.max(1)).unwrap_or_default();
-        let opts = OptsBuilder::default()
-            .ip_or_hostname(host)
-            .tcp_port(port)
-            .user(Some(&self.user.name))
-            .pass(Some(self.user.password.expose()))
-            .db_name(Some(format!("{dbname}_p")))
-            .setup(vec!["SET SESSION max_statement_time = 300"])
-            .pool_opts(
-                PoolOpts::default().with_constraints(constraints).with_inactive_connection_ttl(Duration::from_secs(30)),
-            );
-        Pool::new(opts)
     }
 }
 
@@ -75,7 +67,7 @@ const CATEGORY_SQL: &str = "SELECT page_id, page_namespace, page_title
 #[async_trait]
 impl PageSource for Replicas {
     async fn transclusions(&self, site: &Site, template: &str, namespace: i32, limits: Limits) -> Result<Vec<Page>> {
-        let mut conn = self.conn(&site.dbname).await?;
+        let mut conn = self.conn(&site.dbname, TRANSCLUSION_TABLES).await?;
         let rows: Vec<(u64, Vec<u8>, u64, Option<Vec<u8>>)> =
             conn.exec(TRANSCLUSIONS_SQL, (template, namespace, limits.max_pages + 1)).await?;
         if rows.len() > limits.max_pages {
@@ -95,11 +87,11 @@ impl PageSource for Replicas {
     }
 
     async fn category_step(&self, site: &Site, categories: &[String], namespace: i32) -> Result<CategoryStep> {
-        let mut conn = self.conn(&site.dbname).await?;
+        let mut conn = self.conn(&site.dbname, CATEGORY_TABLES).await?;
         let mut step = CategoryStep::default();
         for chunk in categories.chunks(IN_LIST_CHUNK) {
             let sql = CATEGORY_SQL.replace("{}", &vec!["?"; chunk.len()].join(","));
-            let mut args: Vec<mysql_async::Value> = chunk.iter().map(|c| c.as_str().into()).collect();
+            let mut args: Vec<wikimisc::mysql_async::Value> = chunk.iter().map(|c| c.as_str().into()).collect();
             args.push(namespace.into());
             let rows: Vec<(u64, i32, Vec<u8>)> = conn.exec(sql, args).await?;
             for (id, ns, title) in rows {
@@ -123,14 +115,24 @@ mod tests {
 
     const LIMITS: Limits = Limits { max_pages: 200_000, max_depth: 5, max_categories: 1000 };
 
-    /// Needs `config.json` with a replica override (SSH tunnel) for enwiki.
+    #[test]
+    fn queries_go_to_the_databases_with_live_tables() {
+        use wikimisc::toolforge::db::ExtensionDb;
+        // Commons moved its links tables, and left frozen copies behind
+        assert_eq!(ExtensionDb::for_tables("commonswiki", CATEGORY_TABLES).unwrap(), Some(ExtensionDb::Links));
+        // page_props stayed in the core database, so this falls back to the API
+        assert!(ExtensionDb::for_tables("commonswiki", TRANSCLUSION_TABLES).is_err());
+        assert_eq!(ExtensionDb::for_tables("enwiki", TRANSCLUSION_TABLES).unwrap(), None);
+    }
+
+    /// Needs `config.json` and replica access (on Toolforge, or tunnels in local mode).
     #[tokio::test]
     #[ignore = "requires database / external services — run with cargo test -- --ignored"]
     async fn replica_matches_api_on_enwiki() {
         let config = Config::load("config.json".as_ref()).unwrap();
         let http = crate::app_state::http_client(&config.user_agent).unwrap();
         let api = ApiSource { api: MwApi::new(http) };
-        let replicas = Replicas::new(config.replicas, config.db_user);
+        let replicas = Replicas::new(&config.replicas, &config.db_credentials).unwrap();
         let site = Site::load(&api.api, "en.wikipedia.org").await.unwrap();
 
         let template = site.db_key(10, "Template:Coord missing");

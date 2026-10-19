@@ -100,18 +100,14 @@ const fn default_max_connections() -> usize {
     4
 }
 
-/// Wiki replicas. The host is derived from the wiki's dbname, so one entry
-/// covers all ~900 wikis. `overrides` maps a dbname to `host:port`, which is
-/// how SSH tunnels are wired up for local development.
+/// Wiki replicas, reached through the `toolforge` crate, which knows their hosts
+/// and which wikis share one. For local development, its local mode connects
+/// through SSH tunnels instead (see docs/DEVELOPMENT.md).
 #[derive(Debug, Clone, Deserialize)]
 pub struct ReplicaConfig {
-    pub host_pattern: String,
-    #[serde(default = "default_mysql_port")]
-    pub port: u16,
-    #[serde(default)]
-    pub overrides: HashMap<String, String>,
-    #[serde(default = "default_max_connections")]
-    pub max_connections_per_wiki: usize,
+    /// Per database server, each serving many wikis.
+    #[serde(default = "default_max_connections", alias = "max_connections_per_wiki")]
+    pub max_connections: usize,
 }
 
 const fn default_mysql_port() -> u16 {
@@ -157,7 +153,8 @@ impl Config {
         let mut config: Self =
             serde_json::from_str(&text).with_context(|| format!("invalid config file {}", path.display()))?;
         let dir = path.parent().unwrap_or(Path::new("."));
-        let db = read_key_values(&dir.join(&config.db_credentials))?;
+        config.db_credentials = dir.join(&config.db_credentials);
+        let db = read_key_values(&config.db_credentials)?;
         config.db_user = DbUser { name: required(&db, "user")?, password: Secret(required(&db, "password")?) };
         config.tool_db.database = config.tool_db.database.replace("{user}", &config.db_user.name);
         let oauth = read_key_values(&dir.join(&config.oauth_file))?;
@@ -218,7 +215,14 @@ mod tests {
         assert!(cfg.server.cookie_secure);
         assert!(cfg.server.session_dir.is_absolute(), "sessions must survive restarts on NFS");
         assert_eq!(cfg.tool_db.host, "tools.db.svc.wikimedia.cloud");
-        assert!(cfg.replicas.overrides.is_empty());
+    }
+
+    #[test]
+    fn old_replica_config_still_loads() {
+        let old = r#"{"host_pattern": "{dbname}.analytics.db.svc.wikimedia.cloud", "port": 3306,
+            "overrides": {"enwiki": "127.0.0.1:3310"}, "max_connections_per_wiki": 3}"#;
+        let replicas: ReplicaConfig = serde_json::from_str(old).unwrap();
+        assert_eq!(replicas.max_connections, 3);
     }
 
     #[test]

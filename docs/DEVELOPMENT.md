@@ -7,7 +7,7 @@ Three files, all gitignored; keep them mode `600`:
 | File | Content |
 |---|---|
 | `config.json` | Hosts, paths, limits. No secrets. Start from `config.json.template`. |
-| `replica.my.cnf` | `[client]` `user` and `password` for ToolsDB and the replicas. Toolforge puts it in the tool's home. |
+| `replica.my.cnf` | `[client]` `user` and `password` for ToolsDB and the replicas. Toolforge puts it in the tool's home. Locally, also `local = true` and the tunnel ports, see below. |
 | `oauth.ini` | OAuth 2 client: `application_key`, `application_secret`, `callback_url`. |
 
 The credential files are found relative to `config.json` (see `db_credentials`
@@ -29,12 +29,13 @@ ssh -N -L 3308:tools.db.svc.wikimedia.cloud:3306 you@login.toolforge.org
 ```
 
 **Replicas.** Without access, candidate pages come from the MediaWiki API
-(slower). To use a replica, tunnel it and map it in `replicas.overrides`:
-
-```sh
-ssh -N -L 3310:enwiki.analytics.db.svc.wikimedia.cloud:3306 you@login.toolforge.org
-# "overrides": {"enwiki": "127.0.0.1:3310"}
-```
+(slower). The replicas are reached through the [`toolforge`](https://docs.rs/toolforge)
+crate, one connection pool per database server. To use them locally, add
+`local = true` to `[client]` in your `replica.my.cnf`, and tunnel all database
+servers with [`toolforge-tunnel`](https://docs.rs/toolforge) (no arguments).
+That puts server sN on port 3306 + N, so s2 takes 3308: move the ToolsDB tunnel
+above to another port, or give the servers other ports in a `[tunnels]` section
+of `replica.my.cnf` (e.g. `s2 = 3402`).
 
 **Logging in locally.** MediaWiki sends users back to the client's registered
 callback URL, which for the production client is the live tool. Two options:

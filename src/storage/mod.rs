@@ -5,11 +5,11 @@ use crate::harvest::JobSpec;
 use crate::harvest::status::{RowStatus, RunStatus};
 use crate::wiki::Page;
 use anyhow::{Context, Result};
-use mysql_async::prelude::{FromValue, Queryable};
-use mysql_async::{Conn, Opts, OptsBuilder, Pool, PoolConstraints, PoolOpts, Row, Value};
 use serde::Serialize;
 use serde_json::Value as Json;
 use std::collections::HashMap;
+use wikimisc::mysql_async::prelude::{FromValue, Queryable};
+use wikimisc::mysql_async::{Conn, Opts, OptsBuilder, Pool, PoolConstraints, PoolOpts, Row, Value};
 
 const INSERT_CHUNK: usize = 500;
 
@@ -364,7 +364,7 @@ impl Store {
 
     /// Replace a share's tags (#174). Ownership is the caller's to check.
     pub async fn set_tags(&self, id: u64, tags: &[String]) -> Result<()> {
-        let mut tx = self.pool.start_transaction(mysql_async::TxOpts::default()).await?;
+        let mut tx = self.pool.start_transaction(wikimisc::mysql_async::TxOpts::default()).await?;
         tx.exec_drop("DELETE FROM share_tag WHERE share_id = ?", (id,)).await?;
         tx.exec_batch("INSERT INTO share_tag (share_id, tag) VALUES (?, ?)", tags.iter().map(|t| (id, t))).await?;
         tx.commit().await?;

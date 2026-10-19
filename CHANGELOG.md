@@ -5,12 +5,23 @@ Add an entry under *Unreleased* with every change.
 
 ## Unreleased
 
+### Changed
+- The replicas are reached through the `toolforge` crate, with one connection pool per database
+  server instead of one per wiki. `replicas.max_connections` (formerly
+  `max_connections_per_wiki`, which still works) is now per server. `replicas.host_pattern`,
+  `port` and `overrides` are gone: for local development, use the crate's local mode, see
+  docs/DEVELOPMENT.md.
+
 ### Added
 - Health and metrics go to the Buggregator service dashboard when `DASHBOARD_TOKEN` is set:
   requests, runs by phase and outcome, rows (edits made, skipped, errors), edit back-offs, and
   active runs. Without the token nothing changes.
 
 ### Fixed
+- Category members and transclusions on Commons are no longer read from the frozen copies of
+  its links tables, which Commons moved to a separate database in September 2026 and which
+  stopped changing then. Category members are read from the new database; transclusions,
+  which also need a table that stayed behind, come from the API.
 - Scholarly articles, which Wikidata's query service keeps in a separate graph, are no longer
   missed: the "instance of" filter and the type, value type, inverse, symmetric, required
   statement and distinct-value checks look there too, instead of reporting false violations.
