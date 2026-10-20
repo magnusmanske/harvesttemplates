@@ -2,19 +2,20 @@
 
 use super::local::{ITEM_OF_CONSTRAINT, PROPERTY, has_statement};
 use super::{Candidate, Services};
-use crate::ids::{ItemId, PropertyId};
 use crate::value::{Value, sparql_term};
 use crate::wiki::api::params;
 use crate::wikidata::wdqs::INSTANCE_OF as INSTANCE_OF_PATH;
 use crate::wikidata::{ConstraintDef, HOST};
 use anyhow::Result;
+use wikimisc::entity_id::{ItemId, PropertyId};
+use wikimisc::sparql_util::values_clause;
 
-const CLASS: PropertyId = PropertyId(2308);
-const RELATION: PropertyId = PropertyId(2309);
-const NAMESPACE: PropertyId = PropertyId(2307);
-const INSTANCE_OF: PropertyId = PropertyId(31);
-const RELATION_SUBCLASS: ItemId = ItemId(21_514_624);
-const RELATION_EITHER: ItemId = ItemId(30_208_840);
+const CLASS: PropertyId = PropertyId::new(2308);
+const RELATION: PropertyId = PropertyId::new(2309);
+const NAMESPACE: PropertyId = PropertyId::new(2307);
+const INSTANCE_OF: PropertyId = PropertyId::new(31);
+const RELATION_SUBCLASS: ItemId = ItemId::new(21_514_624);
+const RELATION_EITHER: ItemId = ItemId::new(30_208_840);
 const COMMONS: &str = "commons.wikimedia.org";
 
 #[derive(Debug, Clone, Copy)]
@@ -74,8 +75,7 @@ fn object_filter(def: &ConstraintDef) -> String {
     if values.is_empty() {
         return "[]".to_string();
     }
-    let list: Vec<String> = values.iter().map(|v| format!("wd:{v}")).collect();
-    format!("?v . VALUES ?v {{ {} }}", list.join(" "))
+    format!("?v . {}", values_clause("v", values))
 }
 
 fn relation(def: &ConstraintDef) -> &'static str {
@@ -117,7 +117,7 @@ async fn conflicts_with(def: &ConstraintDef, c: &Candidate<'_>, s: Services<'_>)
     if ours.is_some_and(|other| has_statement(c, other, &def.items(ITEM_OF_CONSTRAINT))) {
         return Ok(true);
     }
-    let properties: Vec<String> = c.item.property_ids().iter().map(|p| format!("wd:{p}")).collect();
+    let properties = c.item.property_ids();
     if properties.is_empty() {
         return Ok(false);
     }
@@ -126,9 +126,9 @@ async fn conflicts_with(def: &ConstraintDef, c: &Candidate<'_>, s: Services<'_>)
         None => "FILTER(!BOUND(?v))".to_string(),
     };
     let sparql = format!(
-        "ASK {{ VALUES ?prop {{ {} }} ?prop p:P2302 ?c . \
+        "ASK {{ {} ?prop p:P2302 ?c . \
          ?c ps:P2302 wd:Q21502838 ; pq:P2306 wd:{} . OPTIONAL {{ ?c pq:P2305 ?v }} {value_filter} }}",
-        properties.join(" "),
+        values_clause("prop", properties),
         c.property
     );
     s.wdqs.ask(&sparql).await
@@ -197,7 +197,7 @@ mod tests {
             let value = Value::String(value.into());
             let c = Candidate {
                 item: &item,
-                property: PropertyId(345),
+                property: PropertyId::new(345),
                 datatype: Datatype::ExternalId,
                 value: &value,
                 qualifiers: &[],
@@ -218,9 +218,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires database / external services — run with cargo test -- --ignored"]
     async fn live_sparql_is_valid() {
-        let http =
-            crate::app_state::http_client("HarvestTemplates tests (https://github.com/magnusmanske/harvesttemplates)")
-                .unwrap();
+        let http = wikimisc::http::client("HarvestTemplates tests (https://github.com/magnusmanske/harvesttemplates)")
+            .unwrap();
         let (mw, wdqs) = (MwApi::new(http.clone()), Wdqs::wikidata(http));
         let s = Services { wdqs: &wdqs, mw: &mw };
         let item = |c| Entity::new(json!({"id": "Q42", "claims": c})).unwrap();
@@ -230,7 +229,7 @@ mod tests {
         let no_p31 = item(json!({}));
         let c = |i| Candidate {
             item: i,
-            property: PropertyId(345),
+            property: PropertyId::new(345),
             datatype: Datatype::ExternalId,
             value: &value,
             qualifiers: &[],
@@ -242,7 +241,7 @@ mod tests {
         let other = Value::String("nm0000001".into());
         let c2 = Candidate {
             item: &no_p31,
-            property: PropertyId(345),
+            property: PropertyId::new(345),
             datatype: Datatype::ExternalId,
             value: &other,
             qualifiers: &[],
@@ -251,7 +250,7 @@ mod tests {
         let file = Value::String("Douglas adams portrait cropped.jpg".into());
         let c3 = Candidate {
             item: &no_p31,
-            property: PropertyId(18),
+            property: PropertyId::new(18),
             datatype: Datatype::CommonsMedia,
             value: &file,
             qualifiers: &[],

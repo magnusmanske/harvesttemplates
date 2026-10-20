@@ -2,12 +2,12 @@
 
 use super::api::{MwApi, params};
 use super::site::{NS_CATEGORY, NS_TEMPLATE, Site};
-use crate::ids::ItemId;
 use anyhow::{Result, bail};
 use async_trait::async_trait;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashSet;
+use wikimisc::entity_id::ItemId;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Page {

@@ -45,7 +45,7 @@ impl PetScan {
         for page in json["pages"].as_array().context("PetScan returned no page list")? {
             result.page_ids.extend(page["page_id"].as_u64().filter(|id| *id > 0));
             if page["page_namespace"] == 0 {
-                result.titles.extend(page["page_title"].as_str().map(|t| t.replace('_', " ")));
+                result.titles.extend(page["page_title"].as_str().map(wikimisc::title::to_display));
             }
         }
         Ok(result)

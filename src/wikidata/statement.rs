@@ -1,9 +1,9 @@
-use crate::ids::{ItemId, PropertyId};
 use crate::value::{Datatype, Value};
 use serde_json::{Value as Json, json};
+use wikimisc::entity_id::{ItemId, PropertyId};
 
-const IMPORTED_FROM: PropertyId = PropertyId(143);
-const WIKIMEDIA_IMPORT_URL: PropertyId = PropertyId(4656);
+const IMPORTED_FROM: PropertyId = PropertyId::new(143);
+const WIKIMEDIA_IMPORT_URL: PropertyId = PropertyId::new(4656);
 
 /// Where a value came from: the wiki's item and the exact page revision.
 #[derive(Debug, Clone)]
@@ -14,8 +14,7 @@ pub struct Source {
 
 impl Source {
     pub fn new(wiki: Option<ItemId>, host: &str, title: &str, revision: u64) -> Self {
-        let title = urlencoding::encode(&title.replace(' ', "_")).into_owned();
-        Self { wiki, permalink: format!("https://{host}/w/index.php?title={title}&oldid={revision}") }
+        Self { wiki, permalink: wikimisc::title::permalink(host, title, revision) }
     }
 
     fn reference(&self) -> Json {
@@ -86,8 +85,8 @@ mod tests {
 
     #[test]
     fn statement_with_reference() {
-        let source = Source::new(Some(ItemId(328)), "en.wikipedia.org", "The Shawshank Redemption", 123);
-        let s = statement(PropertyId(345), Datatype::ExternalId, &Value::String("tt0111161".into()), &[], &source);
+        let source = Source::new(Some(ItemId::new(328)), "en.wikipedia.org", "The Shawshank Redemption", 123);
+        let s = statement(PropertyId::new(345), Datatype::ExternalId, &Value::String("tt0111161".into()), &[], &source);
         assert_eq!(s["mainsnak"]["property"], "P345");
         assert_eq!(s["mainsnak"]["datatype"], "external-id");
         assert_eq!(s["mainsnak"]["datavalue"]["value"], "tt0111161");
@@ -102,12 +101,26 @@ mod tests {
     }
 
     #[test]
+    fn permalinks_are_encoded_like_mediawiki() {
+        let source = Source::new(None, "en.wikipedia.org", "AC/DC (band) & co", 5);
+        assert_eq!(source.permalink, "https://en.wikipedia.org/w/index.php?title=AC/DC_(band)_%26_co&oldid=5");
+    }
+
+    #[test]
     fn statement_with_qualifiers() {
         let source = Source::new(None, "en.wikipedia.org", "X", 1);
-        let qualifiers =
-            [Qualifier { property: PropertyId(407), datatype: Datatype::Item, value: Value::Item(ItemId(1860)) }];
-        let s =
-            statement(PropertyId(989), Datatype::CommonsMedia, &Value::String("A.ogg".into()), &qualifiers, &source);
+        let qualifiers = [Qualifier {
+            property: PropertyId::new(407),
+            datatype: Datatype::Item,
+            value: Value::Item(ItemId::new(1860)),
+        }];
+        let s = statement(
+            PropertyId::new(989),
+            Datatype::CommonsMedia,
+            &Value::String("A.ogg".into()),
+            &qualifiers,
+            &source,
+        );
         assert_eq!(s["qualifiers"]["P407"][0]["datavalue"]["value"]["id"], "Q1860");
         assert_eq!(s["qualifiers-order"], json!(["P407"]));
         assert_eq!(s["references"][0]["snaks-order"], json!(["P4656"]), "no wiki item, no P143");

@@ -6,15 +6,16 @@
 //! hierarchies exist only in the main one. This holds on WDQS v1 (Blazegraph)
 //! and v2 (QLever) alike, and every query here is plain SPARQL for both.
 
-use crate::ids::{ItemId, PropertyId};
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
+use wikimisc::entity_id::{ItemId, PropertyId};
 use wikimisc::sparql_client::SparqlClient;
 use wikimisc::sparql_endpoint::SparqlEndpoint;
 use wikimisc::sparql_retry::{Retry, RetryPolicy};
+use wikimisc::sparql_util::{string_literal, values_clause};
 
 /// The path from an item to its classes.
 pub const INSTANCE_OF: &str = "wdt:P31";
@@ -77,7 +78,7 @@ impl Wdqs {
 
     async fn select_items_in(&self, graph: &SparqlClient, sparql: &str, var: &str) -> Result<Vec<ItemId>> {
         let json = self.query(graph, sparql).await?;
-        Ok(bindings(&json).filter_map(|b| item_from_uri(b[var]["value"].as_str()?)).collect())
+        Ok(bindings(&json).filter_map(|b| item_from_uri(&b[var])).collect())
     }
 
     /// The Wikidata item of a wiki, via "Wikimedia database name" (P1800).
@@ -92,7 +93,8 @@ impl Wdqs {
     pub async fn items_with_property(&self, property: PropertyId, items: &[ItemId]) -> Result<HashSet<ItemId>> {
         let mut found = HashSet::new();
         for chunk in items.chunks(VALUES_CHUNK) {
-            let sparql = format!("SELECT ?item {{ VALUES ?item {{ {} }} ?item p:{property} [] }}", values(chunk));
+            let sparql =
+                format!("SELECT ?item {{ {} ?item p:{property} [] }}", values_clause("item", chunk.iter().copied()));
             found.extend(self.select_items(&sparql, "item").await?);
         }
         Ok(found)
@@ -106,12 +108,12 @@ impl Wdqs {
         relation: &str,
         classes: &[ItemId],
     ) -> Result<HashSet<ItemId>> {
-        let classes = values(classes);
+        let classes = values_clause("class", classes.iter().copied());
         let mut found = HashSet::new();
         for chunk in items.chunks(VALUES_CHUNK) {
             let sparql = format!(
-                "SELECT DISTINCT ?item {{ VALUES ?item {{ {} }} VALUES ?class {{ {classes} }} ?item {relation}/wdt:P279* ?class }}",
-                values(chunk)
+                "SELECT DISTINCT ?item {{ {} {classes} ?item {relation}/wdt:P279* ?class }}",
+                values_clause("item", chunk.iter().copied())
             );
             found.extend(self.select_items(&sparql, "item").await?);
         }
@@ -121,16 +123,17 @@ impl Wdqs {
     }
 
     /// Which of `items` are articles whose `relation` values — read in the
-    /// scholarly graph — are `classes` or below them in the main graph.
+    /// scholarly graph — are `classes` (a `VALUES ?class` clause) or below them in the main graph.
     async fn articles_in_classes(&self, items: &[ItemId], relation: &str, classes: &str) -> Result<HashSet<ItemId>> {
         let mut items_by_type: HashMap<ItemId, Vec<ItemId>> = HashMap::new();
         for chunk in items.chunks(VALUES_CHUNK) {
-            let sparql =
-                format!("SELECT ?item ?type {{ VALUES ?item {{ {} }} ?item {relation} ?type }}", values(chunk));
+            let sparql = format!(
+                "SELECT ?item ?type {{ {} ?item {relation} ?type }}",
+                values_clause("item", chunk.iter().copied())
+            );
             let json = self.query(&self.scholarly, &sparql).await?;
             for b in bindings(&json) {
-                let uri = |var: &str| item_from_uri(b[var]["value"].as_str()?);
-                if let (Some(item), Some(class)) = (uri("item"), uri("type")) {
+                if let (Some(item), Some(class)) = (item_from_uri(&b["item"]), item_from_uri(&b["type"])) {
                     items_by_type.entry(class).or_default().push(item);
                 }
             }
@@ -139,8 +142,8 @@ impl Wdqs {
         let mut found = HashSet::new();
         for chunk in types.chunks(VALUES_CHUNK) {
             let sparql = format!(
-                "SELECT DISTINCT ?type {{ VALUES ?type {{ {} }} VALUES ?class {{ {classes} }} ?type wdt:P279* ?class }}",
-                values(chunk)
+                "SELECT DISTINCT ?type {{ {} {classes} ?type wdt:P279* ?class }}",
+                values_clause("type", chunk.iter().copied())
             );
             for class in self.select_items(&sparql, "type").await? {
                 found.extend(items_by_type.get(&class).into_iter().flatten());
@@ -159,18 +162,9 @@ fn bindings(json: &Value) -> impl Iterator<Item = &Value> {
     json["results"]["bindings"].as_array().into_iter().flatten()
 }
 
-/// Items as a `VALUES` list.
-fn values(items: &[ItemId]) -> String {
-    items.iter().map(|q| format!("wd:{q}")).collect::<Vec<_>>().join(" ")
-}
-
-pub fn item_from_uri(uri: &str) -> Option<ItemId> {
-    uri.strip_prefix("http://www.wikidata.org/entity/")?.parse().ok()
-}
-
-/// A SPARQL string literal; JSON escaping is a valid subset of SPARQL escaping.
-pub fn string_literal(s: &str) -> String {
-    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string())
+/// The item a result binding (`{"type": "uri", "value": "…/entity/Q42"}`) names.
+fn item_from_uri(binding: &Value) -> Option<ItemId> {
+    ItemId::from_uri(binding["value"].as_str()?).ok()
 }
 
 #[cfg(test)]
@@ -197,13 +191,6 @@ mod tests {
         json!({"type": "uri", "value": format!("http://www.wikidata.org/entity/{q}")})
     }
 
-    #[test]
-    fn literals_are_escaped() {
-        assert_eq!(string_literal(r#"a"b\c"#), r#""a\"b\\c""#);
-        assert_eq!(item_from_uri("http://www.wikidata.org/entity/Q42"), Some(ItemId(42)));
-        assert_eq!(item_from_uri("http://www.wikidata.org/entity/P42"), None);
-    }
-
     #[tokio::test]
     async fn items_in_classes_follows_subclasses() {
         let server = MockServer::start().await;
@@ -218,8 +205,9 @@ mod tests {
         // Q1 is looked up as an article too, and is not one.
         Mock::given(method("POST")).respond_with(rows(json!([]))).mount(&server).await;
         let wdqs = mocked(&server);
-        let found = wdqs.items_in_classes(&[ItemId(1), ItemId(2)], INSTANCE_OF, &[ItemId(571)]).await.unwrap();
-        assert_eq!(found, HashSet::from([ItemId(2)]));
+        let found =
+            wdqs.items_in_classes(&[ItemId::new(1), ItemId::new(2)], INSTANCE_OF, &[ItemId::new(571)]).await.unwrap();
+        assert_eq!(found, HashSet::from([ItemId::new(2)]));
     }
 
     #[tokio::test]
@@ -234,9 +222,9 @@ mod tests {
             .mount(&server)
             .await;
         let wdqs = mocked(&server);
-        let items: Vec<ItemId> = (1..=300).map(ItemId).collect();
-        let found = wdqs.items_with_property(PropertyId(345), &items).await.unwrap();
-        assert_eq!(found, HashSet::from([ItemId(1)]));
+        let items: Vec<ItemId> = (1..=300).map(ItemId::new).collect();
+        let found = wdqs.items_with_property(PropertyId::new(345), &items).await.unwrap();
+        assert_eq!(found, HashSet::from([ItemId::new(1)]));
     }
 
     #[tokio::test]
@@ -258,8 +246,8 @@ mod tests {
             .mount(&scholarly)
             .await;
         let wdqs = Wdqs::new(reqwest::Client::new(), endpoint(&main), endpoint(&scholarly));
-        let found = wdqs.items_in_classes(&[ItemId(3)], INSTANCE_OF, &[ItemId(732_577)]).await.unwrap();
-        assert_eq!(found, HashSet::from([ItemId(3)]));
+        let found = wdqs.items_in_classes(&[ItemId::new(3)], INSTANCE_OF, &[ItemId::new(732_577)]).await.unwrap();
+        assert_eq!(found, HashSet::from([ItemId::new(3)]));
     }
 
     #[tokio::test]

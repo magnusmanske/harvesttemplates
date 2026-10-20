@@ -14,9 +14,10 @@ pub use quantity::{DecimalMark, parse_amount, split_unit, unit_key};
 pub use time::{Calendar, Date, DateLimit, Relation, parse_date, parse_date_parts};
 pub use transform::{Case, Transform, TransformSpec};
 
-use crate::ids::ItemId;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as Json, json};
+use wikimisc::entity_id::ItemId;
+use wikimisc::sparql_util::{commons_media_term, string_literal};
 
 /// Property datatypes HarvestTemplates can write, named as in the Wikibase API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -107,7 +108,7 @@ impl Value {
         match self {
             Self::Item(q) => json!({
                 "type": "wikibase-entityid",
-                "value": { "entity-type": "item", "numeric-id": q.0, "id": q.to_string() },
+                "value": { "entity-type": "item", "numeric-id": q.get(), "id": q.to_string() },
             }),
             Self::String(s) => json!({ "type": "string", "value": s }),
             Self::Time { date, calendar } => json!({
@@ -116,12 +117,12 @@ impl Value {
                     "time": date.wikibase_time(),
                     "timezone": 0, "before": 0, "after": 0,
                     "precision": date.precision(),
-                    "calendarmodel": entity_uri(calendar.item()),
+                    "calendarmodel": calendar.item().uri(),
                 },
             }),
             Self::Quantity { amount, unit } => json!({
                 "type": "quantity",
-                "value": { "amount": amount, "unit": unit.map_or_else(|| "1".to_string(), entity_uri) },
+                "value": { "amount": amount, "unit": unit.map_or_else(|| "1".to_string(), ItemId::uri) },
             }),
             Self::Monolingual { text, language } => json!({
                 "type": "monolingualtext",
@@ -131,7 +132,7 @@ impl Value {
                 "type": "globecoordinate",
                 "value": {
                     "latitude": c.latitude, "longitude": c.longitude, "altitude": null,
-                    "precision": c.precision, "globe": entity_uri(EARTH),
+                    "precision": c.precision, "globe": EARTH.uri(),
                 },
             }),
         }
@@ -213,7 +214,7 @@ impl Value {
     }
 }
 
-const EARTH: ItemId = ItemId(2);
+const EARTH: ItemId = ItemId::new(2);
 
 /// Year, month and day of a Wikibase time value, honouring its precision.
 pub fn existing_date(value: &Json) -> Option<Date> {
@@ -229,17 +230,10 @@ pub fn existing_date(value: &Json) -> Option<Date> {
 pub fn sparql_term(value: &Value, datatype: Datatype) -> Option<String> {
     match (value, datatype) {
         (Value::Item(q), _) => Some(format!("wd:{q}")),
-        (Value::String(s), Datatype::CommonsMedia) => Some(format!(
-            "<http://commons.wikimedia.org/wiki/Special:FilePath/{}>",
-            urlencoding::encode(&s.replace(' ', "_"))
-        )),
-        (Value::String(s), _) => serde_json::to_string(s).ok(),
+        (Value::String(s), Datatype::CommonsMedia) => Some(commons_media_term(s)),
+        (Value::String(s), _) => Some(string_literal(s)),
         _ => None,
     }
-}
-
-pub fn entity_uri(id: impl std::fmt::Display) -> String {
-    format!("http://www.wikidata.org/entity/{id}")
 }
 
 #[cfg(test)]
@@ -271,7 +265,7 @@ mod tests {
         let v = Value::Time { date: Date { year: 1950, month: 5, day: 0 }, calendar: Calendar::Julian };
         assert_eq!(v.datavalue()["value"]["precision"], 10);
         assert_eq!(v.datavalue()["value"]["calendarmodel"], "http://www.wikidata.org/entity/Q1985786");
-        assert_eq!(Value::Item(ItemId(42)).datavalue()["value"]["id"], "Q42");
+        assert_eq!(Value::Item(ItemId::new(42)).datavalue()["value"]["id"], "Q42");
     }
 
     #[test]
@@ -286,5 +280,17 @@ mod tests {
         assert!(qty.matches(&json!({"value": {"amount": "+62.0"}})));
         assert!(Value::String("tt1".into()).matches(&json!({"value": "tt1"})));
         assert!(!Value::String("tt1".into()).matches(&json!({"value": "tt2"})));
+    }
+
+    #[test]
+    fn sparql_terms() {
+        // Commons media as WDQS stores it: spaces (and underscores) as `%20`.
+        let file = Value::String("Albert Einstein_Head (1).jpg".into());
+        assert_eq!(
+            sparql_term(&file, Datatype::CommonsMedia).unwrap(),
+            "<http://commons.wikimedia.org/wiki/Special:FilePath/Albert%20Einstein%20Head%20%281%29.jpg>"
+        );
+        assert_eq!(sparql_term(&Value::String("a \"b\"".into()), Datatype::String).unwrap(), r#""a \"b\"""#);
+        assert_eq!(sparql_term(&Value::Item(ItemId::new(42)), Datatype::Item).unwrap(), "wd:Q42");
     }
 }

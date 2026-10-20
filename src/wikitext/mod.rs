@@ -18,12 +18,6 @@ pub fn lead_section(wikitext: &str) -> &str {
     HEADING.find(wikitext).map_or(wikitext, |m| &wikitext[..m.start()])
 }
 
-/// MediaWiki's first-letter capitalisation of titles: `foo bar` → `Foo bar`.
-pub fn uppercase_first(s: &str) -> String {
-    let mut chars = s.chars();
-    chars.next().map(|c| c.to_uppercase().chain(chars).collect()).unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

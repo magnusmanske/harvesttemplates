@@ -2,17 +2,17 @@ use super::*;
 use crate::auth::{OAuth, Token};
 use crate::config::{OauthConfig, Secret};
 use crate::harvest::JobSpec;
-use crate::ids::PropertyId;
 use crate::storage::Owner;
 use crate::test_support::{mock, test_app, test_store, world};
 use crate::value::TransformSpec;
 use serde_json::json;
+use wikimisc::entity_id::PropertyId;
 
 const OWNER: u64 = 7;
 
 fn spec() -> JobSpec {
     JobSpec {
-        property: Some(PropertyId(345)),
+        property: Some(PropertyId::new(345)),
         template: "IMDb title".into(),
         parameters: vec!["1".into()],
         transform: TransformSpec { add_prefix: "tt".into(), ..Default::default() },
@@ -132,7 +132,7 @@ async fn two_properties_from_one_template() {
     let sessions = tempfile::tempdir().unwrap();
     let app = test_app(store, &server.uri(), sessions.path());
     let spec = JobSpec {
-        extra_properties: vec![ExtraProperty { property: PropertyId(19), parameters: vec!["place".into()] }],
+        extra_properties: vec![ExtraProperty { property: PropertyId::new(19), parameters: vec!["place".into()] }],
         ..spec()
     };
     let owner = Owner { id: OWNER, name: "Tester".into() };

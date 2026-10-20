@@ -108,8 +108,8 @@ fn title(spec: &JobSpec) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ids::PropertyId;
     use serde_json::json;
+    use wikimisc::entity_id::PropertyId;
 
     #[test]
     fn list_rows() {
@@ -125,7 +125,7 @@ mod tests {
         let json = json!({"action": "savenew", "siteid": "en", "project": "wikipedia", "p": "P989",
             "template": "Spoken Wikipedia", "parameters": "1|2|3|", "depth": "3"});
         let spec = JobSpec::from_legacy_query(&pairs(&json));
-        assert_eq!(spec.property, Some(PropertyId(989)));
+        assert_eq!(spec.property, Some(PropertyId::new(989)));
         assert_eq!(spec.parameters, ["1", "2", "3"]);
         assert_eq!(title(&spec), "Spoken Wikipedia → P989 (en.wikipedia)");
         let php_array = json!({"property": "57", "template": "X", "parameter": ["director", "1"]});

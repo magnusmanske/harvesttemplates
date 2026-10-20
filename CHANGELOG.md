@@ -11,6 +11,12 @@ Add an entry under *Unreleased* with every change.
   `max_connections_per_wiki`, which still works) is now per server. `replicas.host_pattern`,
   `port` and `overrides` are gone: for local development, use the crate's local mode, see
   docs/DEVELOPMENT.md.
+- Shared helpers from `wikimisc` replace the tool's own code for entity ids, retried API
+  requests, page titles and logging. Visible effects: the "imported from Wikimedia project"
+  page URL in references and the template link in the form are spelled the way MediaWiki
+  spells them (`title=AC/DC_(band)` instead of `title=AC%2FDC_%28band%29`); property and
+  item ids may also be given as Wikidata URLs; namespace prefixes such as `Шаблон:` are
+  recognised in any letter case; HTTP 408 is retried too; logs go to stderr.
 
 ### Added
 - Health and metrics go to the Buggregator service dashboard when `DASHBOARD_TOKEN` is set:
@@ -18,6 +24,10 @@ Add an entry under *Unreleased* with every change.
   active runs. Without the token nothing changes.
 
 ### Fixed
+- The "distinct values" and "conflicts with" constraint checks now find Commons files whose
+  names contain spaces: the query spelled them with `_`, where WDQS stores `%20`.
+- `--dev-user` is also refused in Toolforge build-service containers, which lack the
+  `/etc/wmcs-project` file it used to look for.
 - Category members and transclusions on Commons are no longer read from the frozen copies of
   its links tables, which Commons moved to a separate database in September 2026 and which
   stopped changing then. Category members are read from the new database; transclusions,

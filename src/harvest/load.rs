@@ -3,13 +3,12 @@
 use super::job::Job;
 use super::spec::SkipIf;
 use crate::app_state::Clients;
-use crate::ids::ItemId;
 use crate::wiki::site::NS_CATEGORY;
 use crate::wiki::{Limits, Page, PageSource};
-use crate::wikitext::uppercase_first;
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use std::collections::HashSet;
+use wikimisc::entity_id::ItemId;
 
 /// Pages that use the template but are not candidates, by reason.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -81,9 +80,8 @@ pub async fn candidates(
 fn manual_list(entries: &[String]) -> HashSet<String> {
     entries
         .iter()
-        .map(|e| e.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" "))
+        .map(|e| wikimisc::title::normalize(e, wikimisc::title::Case::FirstLetter))
         .filter(|e| !e.is_empty())
-        .map(|e| uppercase_first(&e))
         .collect()
 }
 

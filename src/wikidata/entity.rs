@@ -1,4 +1,3 @@
-use crate::ids::{ItemId, PropertyId};
 use crate::value::{Datatype, Date, Value, existing_date};
 use crate::wiki::MwApi;
 use crate::wiki::api::params;
@@ -6,20 +5,21 @@ use anyhow::Result;
 use serde::Serialize;
 use serde_json::{Map, Value as Json};
 use std::collections::HashMap;
+use wikimisc::entity_id::{ItemId, PropertyId};
 
 pub const HOST: &str = "www.wikidata.org";
 const IDS_PER_REQUEST: usize = 50;
 
-const PROPERTY_CONSTRAINT: PropertyId = PropertyId(2302);
-const CONSTRAINT_STATUS: PropertyId = PropertyId(2316);
-const MANDATORY: ItemId = ItemId(21_502_408);
-const SUGGESTION: ItemId = ItemId(62_026_391);
-const DEPRECATED_PROPERTY_CLASSES: [ItemId; 2] = [ItemId(37_911_748), ItemId(18_644_427)];
-const INSTANCE_OF: PropertyId = PropertyId(31);
-const UNIT_SYMBOL: PropertyId = PropertyId(5061);
-const FORMATTER_URL: PropertyId = PropertyId(1630);
-const ALLOWED_UNITS: ItemId = ItemId(21_514_353);
-const ITEM_OF_CONSTRAINT: PropertyId = PropertyId(2305);
+const PROPERTY_CONSTRAINT: PropertyId = PropertyId::new(2302);
+const CONSTRAINT_STATUS: PropertyId = PropertyId::new(2316);
+const MANDATORY: ItemId = ItemId::new(21_502_408);
+const SUGGESTION: ItemId = ItemId::new(62_026_391);
+const DEPRECATED_PROPERTY_CLASSES: [ItemId; 2] = [ItemId::new(37_911_748), ItemId::new(18_644_427)];
+const INSTANCE_OF: PropertyId = PropertyId::new(31);
+const UNIT_SYMBOL: PropertyId = PropertyId::new(5061);
+const FORMATTER_URL: PropertyId = PropertyId::new(1630);
+const ALLOWED_UNITS: ItemId = ItemId::new(21_514_353);
+const ITEM_OF_CONSTRAINT: PropertyId = PropertyId::new(2305);
 
 /// Read access to Wikidata entities.
 #[derive(Debug, Clone)]
@@ -332,13 +332,16 @@ mod tests {
                 {"mainsnak": item_snak("Q19474404"), "qualifiers": {"P2316": [item_snak("Q62026391")]}}
             ]}
         });
-        let info = PropertyInfo::from_json(PropertyId(345), &json);
+        let info = PropertyInfo::from_json(PropertyId::new(345), &json);
         assert_eq!(info.label, "IMDb ID");
         assert_eq!(info.datatype, Some(Datatype::ExternalId));
         assert!(!info.deprecated);
         let statuses: Vec<_> = info.constraints.iter().map(|c| c.status).collect();
         assert_eq!(statuses, [ConstraintStatus::Mandatory, ConstraintStatus::Normal, ConstraintStatus::Suggestion]);
-        assert_eq!(info.constraint(ItemId(21_502_404)).unwrap().first_string(PropertyId(1793)), Some("tt\\d+"));
+        assert_eq!(
+            info.constraint(ItemId::new(21_502_404)).unwrap().first_string(PropertyId::new(1793)),
+            Some("tt\\d+")
+        );
     }
 
     #[test]
@@ -357,18 +360,27 @@ mod tests {
         assert_eq!(date(1928, 2, 2).summary_text().as_deref(), Some("2 February 1928"));
         assert_eq!(date(1928, 2, 0).summary_text().as_deref(), Some("February 1928"));
         assert_eq!(date(1928, 0, 0).summary_text().as_deref(), Some("1928"));
-        assert_eq!(Value::Item(ItemId(5)).summary_text().as_deref(), Some("[[Q5]]"));
+        assert_eq!(Value::Item(ItemId::new(5)).summary_text().as_deref(), Some("[[Q5]]"));
     }
 
     #[tokio::test]
     #[ignore = "requires database / external services — run with cargo test -- --ignored"]
     async fn live_removal_is_found() {
-        let http =
-            crate::app_state::http_client("HarvestTemplates tests (https://harvesttemplates.toolforge.org)").unwrap();
+        let http = wikimisc::http::client("HarvestTemplates tests (https://harvesttemplates.toolforge.org)").unwrap();
         let wikidata = Wikidata { api: MwApi::new(http) };
         let isni = |s: &str| Value::String(s.to_string());
-        assert!(wikidata.was_removed(ItemId(5_716_580), PropertyId(213), &isni("0000000116716546")).await.unwrap());
-        assert!(!wikidata.was_removed(ItemId(5_716_580), PropertyId(213), &isni("0000000000000000")).await.unwrap());
+        assert!(
+            wikidata
+                .was_removed(ItemId::new(5_716_580), PropertyId::new(213), &isni("0000000116716546"))
+                .await
+                .unwrap()
+        );
+        assert!(
+            !wikidata
+                .was_removed(ItemId::new(5_716_580), PropertyId::new(213), &isni("0000000000000000"))
+                .await
+                .unwrap()
+        );
     }
 
     #[test]
@@ -378,9 +390,12 @@ mod tests {
             {"rank": "deprecated", "mainsnak": item_snak("Q6")}
         ]}}))
         .unwrap();
-        assert!(entity.has_property(PropertyId(31)));
-        assert!(!entity.has_property(PropertyId(21)));
-        assert!(entity.has_value(PropertyId(31), &Value::Item(ItemId(5))));
-        assert!(!entity.has_value(PropertyId(31), &Value::Item(ItemId(6))), "deprecated statements don't count");
+        assert!(entity.has_property(PropertyId::new(31)));
+        assert!(!entity.has_property(PropertyId::new(21)));
+        assert!(entity.has_value(PropertyId::new(31), &Value::Item(ItemId::new(5))));
+        assert!(
+            !entity.has_value(PropertyId::new(31), &Value::Item(ItemId::new(6))),
+            "deprecated statements don't count"
+        );
     }
 }

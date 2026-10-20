@@ -47,7 +47,7 @@ static DEV_USER: OnceLock<User> = OnceLock::new();
 /// Development only: every request counts as logged in as `name`. Its token is
 /// fake, so editing fails; previews work. Refused on Toolforge.
 pub fn enable_dev_user(name: &str) -> anyhow::Result<()> {
-    if std::path::Path::new("/etc/wmcs-project").exists() {
+    if wikimisc::toolforge_app::ToolforgeApp::is_on_toolforge() {
         anyhow::bail!("--dev-user is not allowed on Toolforge");
     }
     let token = Token { access: Secret::from("dev"), refresh: None, expires_at: 0 };

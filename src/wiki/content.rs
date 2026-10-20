@@ -2,9 +2,9 @@
 
 use super::api::{MwApi, params};
 use super::site::{NS_FILE, Site};
-use crate::ids::ItemId;
 use anyhow::Result;
 use std::collections::HashMap;
+use wikimisc::entity_id::ItemId;
 
 const PAGES_PER_REQUEST: usize = 50;
 

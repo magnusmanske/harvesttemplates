@@ -4,13 +4,13 @@ use super::spec::JobSpec;
 use super::spec::QualifierSource;
 use crate::app_state::Clients;
 use crate::constraints;
-use crate::ids::{ItemId, PropertyId};
 use crate::value::{self, Datatype, DecimalMark, Transform, Value, ValueError};
 use crate::wiki::Site;
 use crate::wiki::site::{NS_TEMPLATE, host_for};
 use crate::wikidata::{ConstraintDef, ConstraintStatus, PropertyInfo};
 use crate::wikitext::TemplateMatcher;
 use std::collections::HashMap;
+use wikimisc::entity_id::{ItemId, PropertyId};
 
 #[derive(Debug, thiserror::Error)]
 pub enum JobError {
@@ -180,7 +180,7 @@ async fn prepare_qualifiers(clients: &Clients, spec: &JobSpec) -> Result<Vec<Pre
 fn fixed_value(datatype: Datatype, text: &str, spec: &JobSpec) -> Result<Value, String> {
     let err = |e: ValueError| e.to_string();
     Ok(match datatype {
-        Datatype::Item => Value::Item(text.parse()?),
+        Datatype::Item => Value::Item(ItemId::parse_lenient(text).map_err(|e| e.to_string())?),
         Datatype::Time => {
             Value::Time { date: value::parse_date(text, "en", spec.calendar).map_err(err)?, calendar: spec.calendar }
         }
@@ -263,7 +263,7 @@ fn check_language(code: &str) -> Result<(), JobError> {
 
 /// The template itself plus the accepted redirects (#159).
 fn template_names(key: &str, redirects: Vec<String>, selected: Option<&[String]>) -> Vec<String> {
-    let mut names = vec![key.replace('_', " ")];
+    let mut names = vec![wikimisc::title::to_display(key)];
     names.extend(redirects.into_iter().filter(|r| selected.is_none_or(|s| s.contains(r))));
     names
 }

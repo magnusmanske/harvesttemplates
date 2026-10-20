@@ -1,9 +1,9 @@
 //! What to harvest. Serialised as JSON for the API and storage, and convertible
 //! to and from the original tool's permalink query string.
 
-use crate::ids::{ItemId, PropertyId};
 use crate::value::{ArchiveUrls, Calendar, Case, Date, DateLimit, DecimalMark, LinkChoice, Relation, TransformSpec};
 use serde::{Deserialize, Serialize};
+use wikimisc::entity_id::{ItemId, PropertyId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -50,7 +50,7 @@ impl QualifierSpec {
 
     fn from_legacy(s: &str) -> Option<Self> {
         let mut parts = s.splitn(3, '|');
-        let property = parts.next()?.parse().ok()?;
+        let property = PropertyId::parse_lenient(parts.next()?).ok()?;
         let source = match (parts.next()?, parts.next()?.trim()) {
             ("fixed", value) => QualifierSource::Fixed { value: value.to_string() },
             ("param", names) => QualifierSource::Parameter { names: split_commas(names) },
@@ -204,7 +204,7 @@ impl JobSpec {
                 "siteid" => spec.siteid = v.to_lowercase(),
                 "project" => spec.project = v.to_lowercase(),
                 "namespace" => spec.namespace = v.parse().unwrap_or(0),
-                "p" | "property" => spec.property = v.parse().ok(),
+                "p" | "property" => spec.property = PropertyId::parse_lenient(v).ok(),
                 "template" => spec.template = v.to_string(),
                 "templateredirects" => spec.template_redirects = Some(split_pipes(v)),
                 "parameters" => spec.parameters.extend(split_pipes(v)),
@@ -221,7 +221,9 @@ impl JobSpec {
                 "pattern" => spec.value_pattern = value.clone(),
                 "petscan" => spec.petscan = v.parse().ok(),
                 "sparql" => spec.sparql = value.clone(),
-                "instanceof" => spec.instance_of = split_pipes(v).iter().filter_map(|c| c.parse().ok()).collect(),
+                "instanceof" => {
+                    spec.instance_of = split_pipes(v).iter().filter_map(|c| ItemId::parse_lenient(c).ok()).collect();
+                }
                 "archive" => {
                     spec.archive_urls = match v {
                         "skip" => ArchiveUrls::Skip,
@@ -247,14 +249,14 @@ impl JobSpec {
                 "replacevalue" => spec.transform.replace = value.clone(),
                 "wikisyntax" => spec.plain_links = v == "1",
                 "link" => spec.link_choice = if v == "last" { LinkChoice::Last } else { LinkChoice::First },
-                "calendar" if v == Calendar::Julian.item().to_string() => {
+                "calendar" if Calendar::Julian.item() == v => {
                     spec.calendar = Calendar::Julian;
                 }
                 "limityear" => legacy_limit.0 = Some(limit_date(v)),
                 "rel" => {
                     legacy_limit.1 = Some(if v == "l" { Relation::Before } else { Relation::AtLeast });
                 }
-                "unit" => spec.unit = v.parse().ok().filter(|_| v != "1"),
+                "unit" => spec.unit = ItemId::parse_lenient(v).ok().filter(|_| v != "1"),
                 "decimalmark" if v == "," => spec.decimal_mark = DecimalMark::Comma,
                 "monolanguage" => spec.language = v.to_string(),
                 "category" => spec.category = v.to_string(),
@@ -266,11 +268,15 @@ impl JobSpec {
                 "skipif" if v == "value" => spec.skip_if = SkipIf::Value,
                 "skipremoved" => spec.skip_removed = v != "0",
                 "constraints" => {
-                    spec.constraints = Some(split_pipes(v).iter().filter_map(|c| c.parse().ok()).collect());
+                    spec.constraints =
+                        Some(split_pipes(v).iter().filter_map(|c| ItemId::parse_lenient(c).ok()).collect());
                 }
                 "qualifier" => spec.qualifiers.extend(QualifierSpec::from_legacy(v)),
                 "also" => spec.extra_properties.extend(v.split_once('|').and_then(|(p, names)| {
-                    Some(ExtraProperty { property: p.parse().ok()?, parameters: split_commas(names) })
+                    Some(ExtraProperty {
+                        property: PropertyId::parse_lenient(p).ok()?,
+                        parameters: split_commas(names),
+                    })
                 })),
                 _ => {}
             }
@@ -439,7 +445,7 @@ mod tests {
             "siteid=de&project=wikipedia&namespace=0&p=P227&template=Normdaten&templateredirects=Authority%20control&parameters=GND&category=Wikipedia%3AGND%20in%20Wikipedia%20vorhanden%2C%20fehlt%20jedoch%20in%20Wikidata&depth=1&constraints=Q21502838%7CQ21502410%7CQ21510851%7CQ53869507%7CQ21502404&alreadyset=1&wikisyntax=1",
         );
         assert_eq!(spec.siteid, "de");
-        assert_eq!(spec.property, Some(PropertyId(227)));
+        assert_eq!(spec.property, Some(PropertyId::new(227)));
         assert_eq!(spec.template_redirects, Some(vec!["Authority control".to_string()]));
         assert_eq!(spec.parameters, ["GND"]);
         assert_eq!(spec.category, "Wikipedia:GND in Wikipedia vorhanden, fehlt jedoch in Wikidata");
@@ -453,7 +459,7 @@ mod tests {
         let spec = parse(
             "siteid=en&project=wikipedia&namespace=0&property=345&template=IMDb%20title&parameter=id&parameter=1&prefix=tt&category=2016%20films&depth=0&set=0&offset=0&limit=10000&wikisyntax=0&",
         );
-        assert_eq!(spec.property, Some(PropertyId(345)));
+        assert_eq!(spec.property, Some(PropertyId::new(345)));
         assert_eq!(spec.parameters, ["id", "1"]);
         assert_eq!(spec.transform.add_prefix, "tt");
         assert_eq!(spec.skip_if, SkipIf::Value);
@@ -467,7 +473,7 @@ mod tests {
         let limit = spec.date_limit.unwrap();
         assert_eq!((limit.relation, limit.date.year), (Relation::Before, 1582));
         let spec = parse("p=2067&template=Meteoryt&parameters=masa&unit=Q41803&decimalmark=,");
-        assert_eq!(spec.unit, Some(ItemId(41_803)));
+        assert_eq!(spec.unit, Some(ItemId::new(41_803)));
         assert_eq!(spec.decimal_mark, DecimalMark::Comma);
         assert_eq!(parse("unit=1").unit, None);
     }
@@ -482,19 +488,21 @@ mod tests {
         spec.value_pattern = "{1}-{2}".into();
         spec.unwrap_templates = true;
         spec.lead_only = true;
-        spec.extra_properties =
-            vec![ExtraProperty { property: PropertyId(570), parameters: vec!["death_date".into(), "died".into()] }];
+        spec.extra_properties = vec![ExtraProperty {
+            property: PropertyId::new(570),
+            parameters: vec!["death_date".into(), "died".into()],
+        }];
         spec.skip_removed = false;
-        spec.instance_of = vec![ItemId(571), ItemId(7725634)];
+        spec.instance_of = vec![ItemId::new(571), ItemId::new(7725634)];
         spec.petscan = Some(4_242);
         spec.sparql = "SELECT ?item { ?item wdt:P31 wd:Q5 }".into();
         spec.archive_urls = ArchiveUrls::Skip;
         spec.transform.case = Case::Upper;
         spec.coordinate_parameters = Some(CoordinateParameters { latitude: "lat".into(), longitude: "long".into() });
         spec.qualifiers = vec![
-            QualifierSpec { property: PropertyId(407), source: QualifierSource::Fixed { value: "Q1860".into() } },
+            QualifierSpec { property: PropertyId::new(407), source: QualifierSource::Fixed { value: "Q1860".into() } },
             QualifierSpec {
-                property: PropertyId(585),
+                property: PropertyId::new(585),
                 source: QualifierSource::Parameter { names: vec!["date".into(), "datum".into()] },
             },
         ];

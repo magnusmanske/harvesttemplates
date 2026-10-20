@@ -4,15 +4,15 @@
 mod local;
 mod remote;
 
-use crate::ids::{ItemId, PropertyId};
 use crate::value::{Datatype, Value};
 use crate::wiki::MwApi;
 use crate::wikidata::{ConstraintDef, Entity, Wdqs};
 use anyhow::Result;
 use remote::Remote;
 use serde::Serialize;
+use wikimisc::entity_id::{ItemId, PropertyId};
 
-const EXCEPTIONS: PropertyId = PropertyId(2303);
+const EXCEPTIONS: PropertyId = PropertyId::new(2303);
 
 /// The statement about to be added, and the item it goes to.
 #[derive(Debug)]
@@ -47,11 +47,11 @@ pub struct ConstraintType {
 }
 
 const fn local(id: u64, name: &'static str, f: fn(&ConstraintDef, &Candidate) -> bool) -> ConstraintType {
-    ConstraintType { id: ItemId(id), name, rule: Rule::Local(f) }
+    ConstraintType { id: ItemId::new(id), name, rule: Rule::Local(f) }
 }
 
 const fn remote(id: u64, name: &'static str, r: Remote) -> ConstraintType {
-    ConstraintType { id: ItemId(id), name, rule: Rule::Remote(r) }
+    ConstraintType { id: ItemId::new(id), name, rule: Rule::Remote(r) }
 }
 
 /// Every supported constraint type.
@@ -117,7 +117,7 @@ mod tests {
     fn registry_ids_are_unique() {
         let ids: HashSet<_> = TYPES.iter().map(|t| t.id).collect();
         assert_eq!(ids.len(), TYPES.len());
-        assert_eq!(find(ItemId(21_502_410)).unwrap().name, "distinct values");
-        assert!(find(ItemId(1)).is_none());
+        assert_eq!(find(ItemId::new(21_502_410)).unwrap().name, "distinct values");
+        assert!(find(ItemId::new(1)).is_none());
     }
 }

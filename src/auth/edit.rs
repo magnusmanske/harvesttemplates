@@ -2,12 +2,12 @@
 
 use super::oauth::{CallError, OAuth, Token};
 use super::tokens::TokenCache;
-use crate::ids::ItemId;
 use crate::wiki::api::{Params, params};
 use anyhow::anyhow;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
+use wikimisc::entity_id::ItemId;
 
 pub const WIKIDATA_API: &str = "https://www.wikidata.org/w/api.php";
 /// Seconds of replication lag at which Wikidata asks bots and tools to pause.
@@ -169,7 +169,7 @@ mod tests {
         .await;
         respond(&server, body_string_contains("action=wbeditentity"), 200, json!({"success": 1})).await;
         let mut ed = editor(&server.uri(), token("A", 3600));
-        ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
+        ed.add_statements(ItemId::new(1), &[json!({})], "s").await.unwrap();
         let requests = server.received_requests().await.unwrap();
         assert_eq!(requests[1].headers.get("authorization").unwrap(), "Bearer A");
         assert!(String::from_utf8_lossy(&requests[1].body).contains("maxlag=5"));
@@ -191,11 +191,11 @@ mod tests {
         respond(&server, body_string_contains("action=wbeditentity"), 200, json!({"success": 1})).await;
 
         let mut ed = editor(&server.uri(), token("A", 3600));
-        ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
+        ed.add_statements(ItemId::new(1), &[json!({})], "s").await.unwrap();
         assert_eq!(ed.tokens.get(1).unwrap().access.expose(), "B", "rejected token was refreshed");
 
         let mut ed = editor(&server.uri(), token("A", 10));
-        ed.add_statements(ItemId(1), &[json!({})], "s").await.unwrap();
+        ed.add_statements(ItemId::new(1), &[json!({})], "s").await.unwrap();
         let refreshed = ed.tokens.get(1).unwrap();
         assert_eq!(refreshed.refresh.unwrap().expose(), "R2", "expiring token was refreshed before use");
     }
@@ -205,7 +205,7 @@ mod tests {
         let server = MockServer::start().await;
         respond(&server, path("/access_token"), 400, json!({"error": "invalid_grant"})).await;
         respond(&server, path("/api"), 401, json!({})).await;
-        let err = editor(&server.uri(), token("A", 3600)).add_statements(ItemId(1), &[], "s").await.unwrap_err();
+        let err = editor(&server.uri(), token("A", 3600)).add_statements(ItemId::new(1), &[], "s").await.unwrap_err();
         assert!(matches!(err, EditError::Fatal(m) if m.contains("log in again")));
     }
 

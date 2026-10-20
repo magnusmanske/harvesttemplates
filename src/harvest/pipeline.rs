@@ -5,7 +5,6 @@ use super::job::{Job, PreparedSource};
 use super::spec::SkipIf;
 use crate::app_state::Clients;
 use crate::constraints::{Candidate, first_violation};
-use crate::ids::ItemId;
 use crate::value::{self, ArchiveUrls, Archived, Datatype, Date, Value, ValueError};
 use crate::wiki::Page;
 use crate::wiki::content::{self, FileLocation, LinkTarget, Revision};
@@ -14,6 +13,7 @@ use crate::wikitext::{TemplateParams, clean_value_with, lead_section};
 use regex::Regex;
 use serde_json::Value as Json;
 use std::sync::LazyLock;
+use wikimisc::entity_id::ItemId;
 
 /// Nothing to do (`Skip`), or something is wrong with the value (`Error`).
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,31 +1,14 @@
 //! Health and metrics for the Buggregator service dashboard (see `wikimisc::telemetry`).
 //! Metric names live here so the set stays small and every label bounded.
 
-use axum::{extract::Request, middleware::Next, response::Response};
-use std::time::Instant;
 use wikimisc::metrics::{counter, gauge};
-use wikimisc::telemetry::{Telemetry, TelemetryError};
+use wikimisc::telemetry::Telemetry;
 
 /// Starts pushing to the dashboard (token from `$DASHBOARD_TOKEN`). Optional: without a token,
 /// or on any error, the service just runs without it. On SIGTERM/SIGINT it sends a final push
 /// and exits; interrupted runs are paused by `recover_after_restart` as before.
 pub fn start() {
-    match Telemetry::builder("web").version(env!("CARGO_PKG_VERSION")).install() {
-        Ok(_) => tracing::info!("telemetry enabled"),
-        Err(e @ TelemetryError::NoToken) => tracing::info!("telemetry disabled: {e}"),
-        Err(e) => tracing::warn!("telemetry disabled: {e}"),
-    }
-}
-
-/// Records each request's status and duration; the health check is left out.
-pub async fn record_request(request: Request, next: Next) -> Response {
-    if request.uri().path() == "/api/healthz" {
-        return next.run(request).await;
-    }
-    let start = Instant::now();
-    let response = next.run(request).await;
-    wikimisc::telemetry::record_http_request(response.status().as_u16(), start.elapsed());
-    response
+    Telemetry::builder("web").version(env!("CARGO_PKG_VERSION")).install_or_log();
 }
 
 /// A run's task ended. `phase` is `load`, `preview` or `edit`; `status` a `RunStatus` name.

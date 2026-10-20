@@ -1,9 +1,9 @@
 //! Pull link targets, file names and URLs out of cleaned wikitext values.
 
 use super::ValueError;
-use crate::wikitext::uppercase_first;
 use regex::Regex;
 use std::sync::LazyLock;
+use wikimisc::title::{self, Case};
 
 static WIKILINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[\[([^|\]]+)").unwrap());
 static EXTERNAL_LINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[([^\s\]]+)(?:\s[^\]]*)?\]").unwrap());
@@ -41,13 +41,13 @@ pub fn link_target(value: &str, allow_plain: bool, choice: LinkChoice) -> Result
 /// `prefixes` are the wiki's File namespace names and aliases.
 pub fn file_name(value: &str, prefixes: &[String]) -> Result<String, ValueError> {
     let name = WIKILINK.captures(value).map_or(value, |c| c.get(1).map_or(value, |m| m.as_str()));
-    let name = strip_namespace(name.trim(), prefixes);
+    let name = title::strip_namespace(name, prefixes).unwrap_or(name);
     let name = urlencoding::decode(name).map_or_else(|_| name.to_string(), |d| d.into_owned());
-    let name = name.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ");
+    let name = title::normalize(&name, Case::FirstLetter);
     if name.is_empty() || !name.contains('.') {
         return Err(ValueError::NotAFile);
     }
-    Ok(uppercase_first(&name))
+    Ok(name)
 }
 
 /// The URL of `[https://example.org label]`, or the value itself.
@@ -104,14 +104,6 @@ pub fn archived(url: &str) -> Archived {
     let host = url.split("://").nth(1).unwrap_or(url).split(['/', '?', '#']).next().unwrap_or_default();
     let is_archive = OTHER_ARCHIVES.iter().any(|a| host == *a || host.ends_with(&format!(".{a}")));
     if is_archive { Archived::Other } else { Archived::No }
-}
-
-fn strip_namespace<'a>(name: &'a str, prefixes: &[String]) -> &'a str {
-    let Some((prefix, rest)) = name.split_once(':') else {
-        return name;
-    };
-    let prefix = prefix.trim().replace('_', " ").to_lowercase();
-    if prefixes.iter().any(|p| p.to_lowercase() == prefix) { rest.trim_start() } else { name }
 }
 
 #[cfg(test)]

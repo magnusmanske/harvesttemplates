@@ -2,24 +2,24 @@
 //! Each returns `true` on violation.
 
 use super::Candidate;
-use crate::ids::{ItemId, PropertyId};
 use crate::value::{Date, Value, existing_date};
 use crate::wikidata::ConstraintDef;
 use fancy_regex::{Regex, RegexBuilder};
 use serde_json::Value as Json;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
+use wikimisc::entity_id::{ItemId, PropertyId};
 
-pub const ITEM_OF_CONSTRAINT: PropertyId = PropertyId(2305);
-pub const PROPERTY: PropertyId = PropertyId(2306);
-const FORMAT: PropertyId = PropertyId(1793);
-const MIN_DATE: PropertyId = PropertyId(2310);
-const MAX_DATE: PropertyId = PropertyId(2311);
-const MAX_QUANTITY: PropertyId = PropertyId(2312);
-const MIN_QUANTITY: PropertyId = PropertyId(2313);
-const SCOPE: PropertyId = PropertyId(5314);
-const WIKIBASE_ITEM: ItemId = ItemId(29_934_200);
-const AS_MAIN_VALUE: ItemId = ItemId(54_828_448);
+pub const ITEM_OF_CONSTRAINT: PropertyId = PropertyId::new(2305);
+pub const PROPERTY: PropertyId = PropertyId::new(2306);
+const FORMAT: PropertyId = PropertyId::new(1793);
+const MIN_DATE: PropertyId = PropertyId::new(2310);
+const MAX_DATE: PropertyId = PropertyId::new(2311);
+const MAX_QUANTITY: PropertyId = PropertyId::new(2312);
+const MIN_QUANTITY: PropertyId = PropertyId::new(2313);
+const SCOPE: PropertyId = PropertyId::new(5314);
+const WIKIBASE_ITEM: ItemId = ItemId::new(29_934_200);
+const AS_MAIN_VALUE: ItemId = ItemId::new(54_828_448);
 /// Keeps a pathological format pattern from tying up a worker.
 const BACKTRACK_LIMIT: usize = 100_000;
 
@@ -208,7 +208,7 @@ mod tests {
             Value::Item(_) => Datatype::Item,
             _ => Datatype::String,
         };
-        let c = Candidate { item: &entity, property: PropertyId(1), datatype, value: &value, qualifiers: &[] };
+        let c = Candidate { item: &entity, property: PropertyId::new(1), datatype, value: &value, qualifiers: &[] };
         f(d, &c)
     }
 
@@ -232,9 +232,9 @@ mod tests {
     fn value_lists() {
         let d = def("Q21510859", json!({"P2305": item_snaks(&["Q5", "Q6"])}));
         let empty = item(json!({}));
-        assert!(!check(one_of, &d, &empty, Value::Item(ItemId(5))));
-        assert!(check(one_of, &d, &empty, Value::Item(ItemId(7))));
-        assert!(check(none_of, &d, &empty, Value::Item(ItemId(6))));
+        assert!(!check(one_of, &d, &empty, Value::Item(ItemId::new(5))));
+        assert!(check(one_of, &d, &empty, Value::Item(ItemId::new(7))));
+        assert!(check(none_of, &d, &empty, Value::Item(ItemId::new(6))));
     }
 
     #[test]
@@ -244,7 +244,7 @@ mod tests {
         let empty = item(json!({}));
         let qty = |amount: &str, unit| Value::Quantity { amount: amount.into(), unit };
         assert!(!check(allowed_units, &d, &empty, qty("+62", None)), "#178: no unit allowed");
-        assert!(check(allowed_units, &d, &empty, qty("+62", Some(ItemId(11_573)))));
+        assert!(check(allowed_units, &d, &empty, qty("+62", Some(ItemId::new(11_573)))));
         assert!(!check(integer, &d, &empty, qty("+62.000", None)));
         assert!(check(integer, &d, &empty, qty("+62.5", None)));
     }

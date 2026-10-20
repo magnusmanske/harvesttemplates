@@ -3,11 +3,11 @@
 
 use super::ValueError;
 use super::numerals::to_ascii_digits;
-use crate::ids::ItemId;
 use regex::{Captures, Regex};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{LazyLock, OnceLock};
+use wikimisc::entity_id::ItemId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -20,8 +20,8 @@ pub enum Calendar {
 impl Calendar {
     pub const fn item(self) -> ItemId {
         match self {
-            Self::Gregorian => ItemId(1_985_727),
-            Self::Julian => ItemId(1_985_786),
+            Self::Gregorian => ItemId::new(1_985_727),
+            Self::Julian => ItemId::new(1_985_786),
         }
     }
 

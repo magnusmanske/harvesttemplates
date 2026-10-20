@@ -1,10 +1,11 @@
 use super::api::{MwApi, params};
-use crate::ids::ItemId;
-use crate::wikitext::{TemplateMatcher, uppercase_first};
+use crate::wikitext::TemplateMatcher;
 use anyhow::{Result, anyhow, bail};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use wikimisc::entity_id::ItemId;
+use wikimisc::title::{self, Case};
 
 /// Projects selectable in the form, as in the original tool.
 pub const PROJECTS: [&str; 10] = [
@@ -103,7 +104,7 @@ impl Site {
 
     /// `Category:Foo bar` for namespace 14 and `Foo_bar`.
     pub fn full_title(&self, namespace: i32, title: &str) -> String {
-        let title = title.replace('_', " ");
+        let title = title::to_display(title);
         match self.namespaces.get(&namespace) {
             Some(prefix) if !prefix.is_empty() => format!("{prefix}:{title}"),
             _ => title,
@@ -119,17 +120,10 @@ impl Site {
             NS_FILE => &self.file_prefixes,
             _ => &Vec::new(),
         };
-        let title = title.trim().trim_start_matches(':');
-        let title = match title.split_once(':') {
-            Some((p, rest)) if prefixes.iter().any(|x| x.eq_ignore_ascii_case(p.trim())) => rest,
-            _ => title,
-        };
-        let key = title
-            .split(|c: char| c == '_' || c.is_whitespace())
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join("_");
-        if namespace == NS_TEMPLATE && self.template_case_sensitive { key } else { uppercase_first(&key) }
+        let title = title::strip_namespace(title, prefixes).unwrap_or(title);
+        let case =
+            if namespace == NS_TEMPLATE && self.template_case_sensitive { Case::Sensitive } else { Case::FirstLetter };
+        title::to_db_key(&title::normalize(title, case))
     }
 
     /// Redirects to a template (names without prefix), or `None` if it does not exist.
@@ -149,7 +143,7 @@ impl Site {
             exists &= page.get("missing").is_none() && page.get("invalid").is_none();
             let redirects = page["redirects"].as_array().into_iter().flatten();
             names.extend(
-                redirects.filter_map(|r| r["title"].as_str()).map(|t| self.db_key(NS_TEMPLATE, t).replace('_', " ")),
+                redirects.filter_map(|r| r["title"].as_str()).map(|t| title::to_display(&self.db_key(NS_TEMPLATE, t))),
             );
             true
         })

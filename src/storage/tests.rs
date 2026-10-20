@@ -1,6 +1,6 @@
 use super::*;
-use crate::ids::{ItemId, PropertyId};
 use crate::test_support::test_store;
+use wikimisc::entity_id::{ItemId, PropertyId};
 
 fn owner() -> Owner {
     Owner { id: 7, name: "Example User".into() }
@@ -11,7 +11,7 @@ fn pages(n: u64) -> Vec<Page> {
         .map(|i| Page {
             id: i,
             title: format!("Page {i} – ü"),
-            item: (i % 2 == 0).then_some(ItemId(i)),
+            item: (i % 2 == 0).then_some(ItemId::new(i)),
             latest_revision: i,
         })
         .collect()
@@ -21,7 +21,7 @@ fn pages(n: u64) -> Vec<Page> {
 async fn runs_rows_and_shares() {
     let (_db, store) = test_store().await;
     store.migrate().await.unwrap(); // idempotent
-    let spec = JobSpec { property: Some(PropertyId(345)), template: "IMDb title".into(), ..Default::default() };
+    let spec = JobSpec { property: Some(PropertyId::new(345)), template: "IMDb title".into(), ..Default::default() };
 
     let id = store.create_run(&owner(), &spec, None).await.unwrap();
     let run = store.run(id).await.unwrap().unwrap();

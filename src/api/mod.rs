@@ -48,7 +48,6 @@ pub fn router(state: SharedState) -> Router {
     let callback = auth::callback_path(&state.config.oauth.callback_url);
     let static_files = ServeDir::new(&state.config.server.html_dir);
     let middleware = ServiceBuilder::new()
-        .layer(middleware::from_fn(crate::telemetry::record_request))
         .layer(TraceLayer::new_for_http())
         .layer(CatchPanicLayer::new())
         .layer(TimeoutLayer::with_status_code(StatusCode::GATEWAY_TIMEOUT, REQUEST_TIMEOUT))
@@ -56,14 +55,16 @@ pub fn router(state: SharedState) -> Router {
         .layer(header_layer(header::X_CONTENT_TYPE_OPTIONS, "nosniff"))
         .layer(header_layer(header::X_FRAME_OPTIONS, "DENY"))
         .layer(header_layer(header::REFERRER_POLICY, "strict-origin-when-cross-origin"));
-    Router::new()
+    let router = Router::new()
         .nest("/api", api)
         .route(&callback, get(auth::callback))
         .route("/share.php", get(|| async { Redirect::permanent("/#/shares") }))
         .fallback_service(static_files)
         .layer(sessions)
         .layer(middleware)
-        .with_state(state)
+        .with_state(state);
+    // Each request's status and duration, for the dashboard; the health check is left out.
+    wikimisc::server::request_metrics(router, &["/api/healthz"])
 }
 
 /// Reject cross-site writes. Together with `SameSite=Lax` cookies this is the CSRF defence.

@@ -1,11 +1,11 @@
 use super::*;
 use crate::harvest::spec::JobSpec;
-use crate::ids::PropertyId;
 use crate::test_support::world;
 use crate::value::TransformSpec;
+use wikimisc::entity_id::PropertyId;
 
 fn page(item: Option<u64>) -> Page {
-    Page { id: 1, title: "The Shawshank Redemption".into(), item: item.map(ItemId), latest_revision: 7 }
+    Page { id: 1, title: "The Shawshank Redemption".into(), item: item.map(ItemId::new), latest_revision: 7 }
 }
 
 fn revision(text: &str) -> Revision {
@@ -14,7 +14,7 @@ fn revision(text: &str) -> Revision {
 
 async fn imdb_job(clients: &Clients) -> Job {
     let spec = JobSpec {
-        property: Some(PropertyId(345)),
+        property: Some(PropertyId::new(345)),
         template: "IMDb title".into(),
         parameters: vec!["id".into(), "1".into()],
         transform: TransformSpec { add_prefix: "tt".into(), ..Default::default() },
@@ -27,7 +27,7 @@ async fn imdb_job(clients: &Clients) -> Job {
 async fn external_id_is_harvested_with_reference() {
     let (_server, clients) = world().await;
     let job = imdb_job(&clients).await;
-    assert_eq!(job.site.edition, Some(ItemId(328)));
+    assert_eq!(job.site.edition, Some(ItemId::new(328)));
     let out = evaluate(&job, &clients, &page(Some(1)), &revision("{{IMDb title|0111161|Shawshank}}")).await;
     assert_eq!(out.raw.as_deref(), Some("0111161"));
     let edit = out.result.unwrap();
@@ -66,7 +66,7 @@ async fn rejections() {
 async fn items_from_links() {
     let (_server, clients) = world().await;
     let spec = JobSpec {
-        property: Some(PropertyId(19)),
+        property: Some(PropertyId::new(19)),
         template: "X".into(),
         parameters: vec!["place".into()],
         plain_links: false,
@@ -77,7 +77,7 @@ async fn items_from_links() {
         let (job, clients) = (&job, &clients);
         async move { evaluate(job, clients, &page(Some(1)), &revision(text)).await.result }
     };
-    assert_eq!(eval("{{X|place=[[Paris|the city]]}}").await.unwrap().value, Value::Item(ItemId(90)));
+    assert_eq!(eval("{{X|place=[[Paris|the city]]}}").await.unwrap().value, Value::Item(ItemId::new(90)));
     assert_eq!(eval("{{X|place=Paris}}").await.unwrap_err(), error("no link to a target page"));
     assert_eq!(eval("{{X|place=[[Self]]}}").await.unwrap_err(), error("the link points to the page itself"));
     assert_eq!(eval("{{X|place=[[Nowhere]]}}").await.unwrap_err(), error("[[Nowhere]] does not exist"));
@@ -86,7 +86,7 @@ async fn items_from_links() {
 #[tokio::test]
 async fn invalid_specs_are_explained() {
     let (_server, clients) = world().await;
-    let base = JobSpec { property: Some(PropertyId(345)), template: "X".into(), ..Default::default() };
+    let base = JobSpec { property: Some(PropertyId::new(345)), template: "X".into(), ..Default::default() };
     let err = Job::prepare(&clients, base.clone()).await.unwrap_err();
     assert_eq!(err.to_string(), "choose a template parameter");
     let bad_regex = JobSpec {
@@ -105,13 +105,13 @@ async fn live_preview_on_enwiki() {
     use crate::harvest::load::candidates;
     use crate::wiki::{ApiSource, Replicas, WithFallback};
     let config = crate::config::Config::load("config.json".as_ref()).unwrap();
-    let clients = Clients::new(&crate::app_state::http_client(&config.user_agent).unwrap());
+    let clients = Clients::new(&wikimisc::http::client(&config.user_agent).unwrap());
     let source = WithFallback {
         primary: Replicas::new(&config.replicas, &config.db_credentials).unwrap(),
         fallback: ApiSource { api: clients.mw.clone() },
     };
     let spec = JobSpec {
-        property: Some(PropertyId(345)),
+        property: Some(PropertyId::new(345)),
         template: "IMDb title".into(),
         parameters: vec!["id".into(), "1".into()],
         transform: TransformSpec { add_prefix: "tt".into(), ..Default::default() },
@@ -138,13 +138,15 @@ async fn qualifiers_fixed_and_from_parameters() {
     use crate::harvest::spec::{QualifierSource, QualifierSpec};
     let (_server, clients) = world().await;
     let fixed = |value: &str| QualifierSpec {
-        property: PropertyId(407),
+        property: PropertyId::new(407),
         source: QualifierSource::Fixed { value: value.into() },
     };
-    let from_date =
-        QualifierSpec { property: PropertyId(585), source: QualifierSource::Parameter { names: vec!["date".into()] } };
+    let from_date = QualifierSpec {
+        property: PropertyId::new(585),
+        source: QualifierSource::Parameter { names: vec!["date".into()] },
+    };
     let spec = JobSpec {
-        property: Some(PropertyId(345)),
+        property: Some(PropertyId::new(345)),
         template: "IMDb title".into(),
         parameters: vec!["1".into()],
         transform: TransformSpec { add_prefix: "tt".into(), ..Default::default() },
@@ -203,10 +205,10 @@ async fn quantities_with_unit_suffixes() {
     )
     .await;
     let spec = JobSpec {
-        property: Some(PropertyId(2067)),
+        property: Some(PropertyId::new(2067)),
         template: "X".into(),
         parameters: vec!["mass".into()],
-        unit: Some(ItemId(11_570)),
+        unit: Some(ItemId::new(11_570)),
         decimal_mark: DecimalMark::Comma,
         ..Default::default()
     };
@@ -215,7 +217,7 @@ async fn quantities_with_unit_suffixes() {
         let (job, clients) = (&job, &clients);
         async move { evaluate(job, clients, &page(Some(1)), &revision(text)).await.result.map(|e| e.value) }
     };
-    let qty = |amount: &str, unit: u64| Value::Quantity { amount: amount.into(), unit: Some(ItemId(unit)) };
+    let qty = |amount: &str, unit: u64| Value::Quantity { amount: amount.into(), unit: Some(ItemId::new(unit)) };
     assert_eq!(eval("{{X|mass=82 g}}").await, Ok(qty("+82", 41_803)));
     assert_eq!(eval("{{X|mass=2,4 [[Kilogram|kg]]}}").await, Ok(qty("+2.4", 11_570)));
     assert_eq!(eval("{{X|mass=62}}").await, Ok(qty("+62", 11_570)), "no suffix: the chosen unit");
@@ -238,7 +240,7 @@ async fn coordinates_from_nested_and_direct_templates() {
         serde_json::json!({"entities": {"P625": {"id": "P625", "datatype": "globe-coordinate", "claims": {}}}}),
     )
     .await;
-    let base = JobSpec { property: Some(PropertyId(625)), template: "X".into(), ..Default::default() };
+    let base = JobSpec { property: Some(PropertyId::new(625)), template: "X".into(), ..Default::default() };
     let at = |spec: JobSpec, text: &'static str| {
         let clients = &clients;
         async move {
@@ -264,7 +266,7 @@ async fn coordinates_from_nested_and_direct_templates() {
 async fn patterns_unwrapping_and_lead_section() {
     let (_server, clients) = world().await;
     let base = JobSpec {
-        property: Some(PropertyId(345)),
+        property: Some(PropertyId::new(345)),
         template: "IMDb title".into(),
         parameters: vec!["id".into()],
         transform: TransformSpec { add_prefix: "tt".into(), ..Default::default() },
@@ -309,7 +311,7 @@ async fn dates_fall_back_to_wikibase_parser() {
     )
     .await;
     let spec = JobSpec {
-        property: Some(PropertyId(569)),
+        property: Some(PropertyId::new(569)),
         template: "X".into(),
         parameters: vec!["born".into()],
         ..Default::default()

@@ -6,7 +6,6 @@ use crate::wiki::{ApiSource, Limits, MwApi, PageSource, PetScan, Replicas, WithF
 use crate::wikidata::{Wdqs, Wikidata};
 use anyhow::{Context, Result};
 use std::sync::Arc;
-use std::time::Duration;
 
 /// Read-only clients for the wikis, Wikidata and WDQS.
 #[derive(Debug, Clone)]
@@ -65,7 +64,9 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: Config) -> Result<Self> {
-        let http = http_client(&config.user_agent)?;
+        // The one outbound HTTP client. All targets are fixed Wikimedia endpoints or
+        // wiki hosts built by [`crate::wiki::site::host_for`], so no SSRF resolver is needed.
+        let http = wikimisc::http::client(&config.user_agent)?;
         let clients = Clients::new(&http);
         let fallback = ApiSource { api: clients.mw.clone() };
         let pages = WithFallback { primary: Replicas::new(&config.replicas, &config.db_credentials)?, fallback };
@@ -92,15 +93,4 @@ impl AppState {
         let h = &self.config.harvest;
         Limits { max_pages: h.max_candidates, max_depth: h.max_category_depth, max_categories: h.max_categories }
     }
-}
-
-/// The one outbound HTTP client. All targets are fixed Wikimedia endpoints or
-/// wiki hosts built by [`crate::wiki::site::host_for`], so no SSRF resolver is needed.
-pub fn http_client(user_agent: &str) -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder()
-        .user_agent(user_agent)
-        .gzip(true)
-        .timeout(Duration::from_secs(60))
-        .connect_timeout(Duration::from_secs(10))
-        .build()?)
 }

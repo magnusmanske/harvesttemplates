@@ -130,7 +130,7 @@ mod tests {
     #[ignore = "requires database / external services — run with cargo test -- --ignored"]
     async fn replica_matches_api_on_enwiki() {
         let config = Config::load("config.json".as_ref()).unwrap();
-        let http = crate::app_state::http_client(&config.user_agent).unwrap();
+        let http = wikimisc::http::client(&config.user_agent).unwrap();
         let api = ApiSource { api: MwApi::new(http) };
         let replicas = Replicas::new(&config.replicas, &config.db_credentials).unwrap();
         let site = Site::load(&api.api, "en.wikipedia.org").await.unwrap();

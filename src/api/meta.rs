@@ -3,7 +3,6 @@
 use super::{ApiError, ApiResult, SharedState};
 use crate::constraints;
 use crate::harvest::JobSpec;
-use crate::ids::{ItemId, PropertyId};
 use crate::wiki::Site;
 use crate::wiki::content::{self, LinkTarget};
 use crate::wiki::site::{NS_TEMPLATE, host_for};
@@ -13,6 +12,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use wikimisc::entity_id::{ItemId, PropertyId};
 
 pub fn routes() -> Router<SharedState> {
     Router::new()
@@ -58,9 +58,9 @@ async fn template(State(app): State<SharedState>, Query(q): Query<WikiQuery>) ->
     let site = load_site(&app, &q).await?;
     let key = site.db_key(NS_TEMPLATE, name);
     let redirects = site.template_redirects(&app.clients.mw, &key).await?;
-    let url = format!("https://{}/wiki/{}", site.host, urlencoding::encode(&site.full_title(NS_TEMPLATE, &key)));
+    let url = wikimisc::title::page_url(&site.host, &site.full_title(NS_TEMPLATE, &key));
     Ok(Json(
-        json!({ "exists": redirects.is_some(), "name": key.replace('_', " "), "redirects": redirects, "url": url }),
+        json!({ "exists": redirects.is_some(), "name": wikimisc::title::to_display(&key), "redirects": redirects, "url": url }),
     ))
 }
 
@@ -113,7 +113,7 @@ fn constraint_types(defs: &[ConstraintDef]) -> Vec<(ItemId, ConstraintStatus)> {
 
 /// Datatype, constraints (with labels and whether we can check them) and allowed units.
 async fn property(State(app): State<SharedState>, Path(id): Path<String>) -> ApiResult<Value> {
-    let id: PropertyId = id.parse().map_err(ApiError::BadRequest)?;
+    let id = PropertyId::parse_lenient(&id).map_err(|e| ApiError::BadRequest(e.to_string()))?;
     let info = app.clients.wikidata.property(id).await?.ok_or(ApiError::NotFound)?;
     let units = info.allowed_units();
     let mut label_ids: Vec<String> = info.constraints.iter().map(|c| c.kind.to_string()).collect();

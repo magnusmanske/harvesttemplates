@@ -3,7 +3,6 @@ use clap::{Parser, Subcommand};
 use harvesttemplates::{api, app_state::AppState, config::Config, legacy_shares, telemetry};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing_subscriber::EnvFilter;
 
 /// HarvestTemplates web service.
 #[derive(Debug, Parser)]
@@ -35,9 +34,7 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
+    wikimisc::logging::init();
     let cli = Cli::parse();
     if let Some(name) = &cli.dev_user {
         harvesttemplates::auth::session::enable_dev_user(name)?;
@@ -55,7 +52,7 @@ async fn main() -> Result<()> {
 }
 
 async fn import_legacy_shares(state: &AppState, dry_run: bool) -> Result<()> {
-    let http = harvesttemplates::app_state::http_client(&state.config.user_agent)?;
+    let http = wikimisc::http::client(&state.config.user_agent)?;
     if !dry_run {
         state.store.migrate().await?;
     }

@@ -1,8 +1,8 @@
 use super::scan::{find_top_level, scan_call};
-use super::uppercase_first;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
+use wikimisc::title::{self, Case};
 
 static COMMENTS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)<!--.*?(?:-->|\z)").unwrap());
 static REFS: LazyLock<Regex> =
@@ -12,7 +12,7 @@ static REFS: LazyLock<Regex> =
 #[derive(Debug, Clone)]
 pub struct TemplateMatcher {
     names: HashSet<String>,
-    /// Lower-cased template namespace names and aliases, e.g. `template`, `vorlage`.
+    /// Template namespace names and aliases, e.g. `Template`, `Vorlage`.
     namespace_prefixes: Vec<String>,
     first_letter_case_insensitive: bool,
 }
@@ -27,10 +27,7 @@ impl TemplateMatcher {
     ) -> Self {
         let mut matcher = Self {
             names: HashSet::new(),
-            namespace_prefixes: namespace_prefixes
-                .into_iter()
-                .map(|p| normalize_spaces(p.as_ref()).to_lowercase())
-                .collect(),
+            namespace_prefixes: namespace_prefixes.into_iter().map(|p| p.as_ref().to_string()).collect(),
             first_letter_case_insensitive,
         };
         matcher.names = names.into_iter().map(|n| matcher.normalize(n.as_ref())).collect();
@@ -67,18 +64,9 @@ impl TemplateMatcher {
     }
 
     fn normalize(&self, name: &str) -> String {
-        let name = normalize_spaces(name);
-        let name = name.strip_prefix(':').unwrap_or(&name).trim_start();
-        let name = self.strip_namespace(name);
-        if self.first_letter_case_insensitive { uppercase_first(name) } else { name.to_string() }
-    }
-
-    fn strip_namespace<'a>(&self, name: &'a str) -> &'a str {
-        let Some((prefix, rest)) = name.split_once(':') else {
-            return name;
-        };
-        let prefix = prefix.trim_end().to_lowercase();
-        if self.namespace_prefixes.contains(&prefix) { rest.trim_start() } else { name }
+        let name = title::strip_namespace(name, &self.namespace_prefixes).unwrap_or(name);
+        let case = if self.first_letter_case_insensitive { Case::FirstLetter } else { Case::Sensitive };
+        title::normalize(name, case)
     }
 }
 
@@ -114,10 +102,6 @@ impl TemplateParams {
     pub fn first_of<'a>(&self, names: impl IntoIterator<Item = &'a str>) -> Option<&str> {
         names.into_iter().find_map(|n| self.get(n))
     }
-}
-
-fn normalize_spaces(s: &str) -> String {
-    s.replace('_', " ").split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 #[cfg(test)]
