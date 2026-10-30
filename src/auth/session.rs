@@ -69,13 +69,7 @@ pub async fn require_user(session: &Session) -> Result<User, ApiError> {
     current_user(session).await.ok_or(ApiError::Unauthorized)
 }
 
-/// Only same-site paths, so the login cannot be abused as an open redirect.
-pub fn safe_return_path(path: Option<&str>) -> String {
-    match path {
-        Some(p) if p.starts_with('/') && !p.starts_with("//") && !p.contains('\\') => p.to_string(),
-        _ => "/".to_string(),
-    }
-}
+pub use wikimisc::web::session::safe_return_path;
 
 #[cfg(test)]
 mod tests {

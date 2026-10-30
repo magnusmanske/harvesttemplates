@@ -10,10 +10,9 @@ pub use error::{ApiError, ApiResult};
 
 use crate::app_state::AppState;
 use axum::Router;
-use axum::extract::Request;
-use axum::http::{HeaderValue, Method, StatusCode, header};
-use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::http::{HeaderValue, StatusCode, header};
+use axum::middleware;
+use axum::response::Redirect;
 use axum::routing::get;
 use std::sync::Arc;
 use std::time::Duration;
@@ -67,22 +66,7 @@ pub fn router(state: SharedState) -> Router {
     wikimisc::server::request_metrics(router, &["/api/healthz"])
 }
 
-/// Reject cross-site writes. Together with `SameSite=Lax` cookies this is the CSRF defence.
-async fn same_origin_writes(request: Request, next: Next) -> Response {
-    let safe = matches!(*request.method(), Method::GET | Method::HEAD | Method::OPTIONS);
-    let headers = request.headers();
-    let origin_host = headers
-        .get(header::ORIGIN)
-        .and_then(|o| o.to_str().ok())
-        .map(|o| o.split_once("://").map_or(o, |(_, host)| host));
-    let host = headers.get(header::HOST).and_then(|h| h.to_str().ok());
-    match origin_host {
-        Some(origin) if !safe && Some(origin) != host => {
-            (StatusCode::FORBIDDEN, "cross-site request refused").into_response()
-        }
-        _ => next.run(request).await,
-    }
-}
+pub use wikimisc::server::same_origin_writes;
 
 fn header_layer(name: header::HeaderName, value: &'static str) -> SetResponseHeaderLayer<HeaderValue> {
     SetResponseHeaderLayer::if_not_present(name, HeaderValue::from_static(value))
@@ -99,6 +83,8 @@ pub async fn serve(state: SharedState, port: u16) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use axum::body::Body;
+    use axum::extract::Request;
+    use axum::http::Method;
     use axum::routing::post;
     use tower::ServiceExt;
 
