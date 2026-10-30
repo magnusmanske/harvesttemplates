@@ -6,6 +6,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use wikimisc::entity_id::ItemId;
 use wikimisc::title::{self, Case};
+use wikimisc::wiki::{Wiki, is_language_code};
 
 /// Projects selectable in the form, as in the original tool.
 pub const PROJECTS: [&str; 10] = [
@@ -31,17 +32,12 @@ pub fn host_for(siteid: &str, project: &str) -> Result<String> {
     if !PROJECTS.contains(&project) {
         bail!("unknown project '{project}'");
     }
-    match project {
-        "commons" | "species" => Ok(format!("{project}.wikimedia.org")),
-        _ if is_language_code(siteid) => Ok(format!("{siteid}.{project}.org")),
-        _ => bail!("invalid wiki language code '{siteid}'"),
+    let special = matches!(project, "commons" | "species");
+    if !special && !is_language_code(siteid) {
+        bail!("invalid wiki language code '{siteid}'");
     }
-}
-
-fn is_language_code(s: &str) -> bool {
-    (2..=20).contains(&s.len())
-        && s.starts_with(|c: char| c.is_ascii_lowercase())
-        && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    let wiki = Wiki::new(siteid, project).map_err(|e| anyhow!("{e}"))?;
+    Ok(wiki.host().to_string())
 }
 
 /// What we need to know about a wiki, from `meta=siteinfo`.

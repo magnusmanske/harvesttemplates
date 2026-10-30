@@ -31,7 +31,7 @@ tower-http = { version = "0.7", features = ["trace", "fs", "timeout", "compressi
 tower-sessions = "0.15"
 tracing = "0.1"
 urlencoding = "2"
-wikimisc = { git = "https://github.com/magnusmanske/wikimisc", features = ["database", "entity-id", "http", "logging", "server", "sparql-client", "telemetry", "title", "toolforge", "web"] }
+wikimisc = { git = "https://github.com/magnusmanske/wikimisc", features = ["database", "entity-id", "http", "logging", "server", "sparql-client", "telemetry", "title", "toolforge", "web", "replicas", "wiki-api"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -7,10 +7,9 @@ use std::path::Path;
 use std::time::Duration;
 use wikimisc::mysql_async::Conn;
 use wikimisc::mysql_async::prelude::Queryable;
+use wikimisc::replicas::Replicas as SharedReplicas;
 use wikimisc::toolforge::db::Cluster;
-use wikimisc::toolforge::pool::WikiPool;
 
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_STATEMENT_TIME: Duration = Duration::from_secs(300);
 const IN_LIST_CHUNK: usize = 500;
 
@@ -20,33 +19,27 @@ const IN_LIST_CHUNK: usize = 500;
 const TRANSCLUSION_TABLES: &[&str] = &["linktarget", "templatelinks", "page", "page_props"];
 const CATEGORY_TABLES: &[&str] = &["linktarget", "categorylinks", "page"];
 
-/// Connections to the wiki replicas, one pool per database server.
+/// Connections to the wiki replicas. Commons keeps `templatelinks` and
+/// `page_props` in different databases, so its transclusions fail here and
+/// come from the API instead (see `WithFallback`).
 #[derive(Debug)]
-pub struct Replicas {
-    pool: WikiPool,
-}
+pub struct Replicas(SharedReplicas);
 
 impl Replicas {
     /// `credentials` is the `replica.my.cnf` with the database user and password.
     pub fn new(config: &ReplicaConfig, credentials: &Path) -> Result<Self> {
-        let pool = WikiPool::builder(Cluster::Analytics)
+        let replicas = SharedReplicas::builder(Cluster::Analytics)
             .my_cnf_path(credentials)
             .pool_max(config.max_connections)
-            .connect_timeout(CONNECT_TIMEOUT)
             .max_statement_time(MAX_STATEMENT_TIME)
             .build()
             .with_context(|| format!("cannot read the replica credentials from {}", credentials.display()))?;
-        Ok(Self { pool })
+        Ok(Self(replicas))
     }
 
-    /// A connection to the database of `dbname` that has all of `tables`. Commons
-    /// keeps `templatelinks` and `page_props` in different databases, so its
-    /// transclusions fail here and come from the API instead (see `WithFallback`).
+    /// A connection to the database of `dbname` that has all of `tables`.
     async fn conn(&self, dbname: &str, tables: &[&str]) -> Result<Conn> {
-        self.pool
-            .connect_for_tables(dbname, tables)
-            .await
-            .with_context(|| format!("cannot connect to the {dbname} replica"))
+        self.0.conn_for_dbname(dbname, tables).await
     }
 }
 
