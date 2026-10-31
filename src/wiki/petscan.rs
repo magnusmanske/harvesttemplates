@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::time::Duration;
 
-pub const BASE_URL: &str = "https://petscan.wmcloud.org/";
+pub const BASE_URL: &str = "https://petscan.toolforge.org/";
 /// PetScan can take minutes; one patient attempt beats retrying a slow query.
 const TIMEOUT: Duration = Duration::from_secs(300);
 
